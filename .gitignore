@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+env/
+ENV/
+.env
+.env.*
+!.env.example
+
+# LangGraph Studio / tracing cache
+.langgraph_api/
+.langgraph_api_cache/
+!langgraph.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs and outputs
+*.log
+outputs/
+*.json
+!langgraph.json
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Project specific
+tests/87c740d2b7c22f9ccabbdef412443d166733d4d925da0e8d6e5b310ccfc89e13.pdf
+pdf_analysis_report_*
+current_installed.txt
