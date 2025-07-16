@@ -155,13 +155,15 @@ class ToolExecutor:
 def run_pdfid(pdf_filename: str) -> str:
     """Runs the pdfid.py tool with the correct flags."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    # Assuming tools are in a sibling directory for better structure
-    tools_dir = os.path.join(os.path.dirname(script_dir), "tools")
+    # Tools are in a subdirectory of the current module
+    tools_dir = os.path.join(script_dir, "tools")
     pdfid_path = os.path.join(tools_dir, "pdfid.py")
     
     if not os.path.exists(pdfid_path):
         print(f"Warning: pdfid.py not found at {pdfid_path}. Using simulation.")
-        return "/OpenAction -> /oPENaCTION\n..."
+        raise FileNotFoundError(f"pdfid.py not found at {pdfid_path}")
+        #         return "/OpenAction -> /oPENaCTION\n..."
+
 
     command_parts = [sys.executable, pdfid_path, "-e", "-f", pdf_filename]
     result = _run_shell_command(command_parts)

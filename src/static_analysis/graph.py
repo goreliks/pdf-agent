@@ -26,17 +26,30 @@ MAX_INTERROGATION_STEPS = 10 # Circuit breaker for infinite loops
 
 
 def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
+    """
+    Runs the initial pdfid scan and performs triage to form a
+    starting hypothesis and investigation plan.
+    """
     print("\n--- Running Triage Node ---")
     pdfid_output = run_pdfid(state.file_path)
+    print(f"[*] PDFID Output: {pdfid_output}")
     chain = create_llm_chain(SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TriageAnalysis)
 
     print("[*] Dr. Reed is performing initial triage...")
     llm_response = chain.invoke({"pdfid_output": pdfid_output})
+
+    # Create an initial EvidenceLocker with the pdfid results
+    initial_evidence = {
+        "structural_summary": {"pdfid": pdfid_output}
+    }
     
     return {
-        "verdict": llm_response.verdict, "phase": llm_response.phase,
-        "current_hypothesis": llm_response.hypothesis, "investigation_queue": llm_response.investigation_queue,
-        "analysis_trail": [llm_response.analysis_trail]
+        "verdict": llm_response.verdict,
+        "phase": llm_response.phase,
+        "current_hypothesis": llm_response.hypothesis,
+        "investigation_queue": llm_response.investigation_queue,
+        "analysis_trail": [llm_response.analysis_trail],
+        "evidence": initial_evidence,
     }
 
 
@@ -137,7 +150,7 @@ def strategic_review_node(state: ForensicCaseFile) -> Dict[str, Any]:
     print(f"[*] Review complete. Reasoning: {review.reasoning}")
 
     return {
-        "investigation_queue": review.updated_queue,
+        "investigation_queue": review.reprioritized_queue,
         "current_hypothesis": review.updated_hypothesis,
         "analysis_trail": [f"Strategic Review: {review.reasoning}"]
     }

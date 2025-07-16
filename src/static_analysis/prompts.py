@@ -203,19 +203,20 @@ Your response must include a concise summary of your findings and this new, focu
 """
 
 
-STRATEGIC_REVIEW_HUMAN_PROMPT = """Dr. Reed, you are in **strategic review mode**. Your purpose here is not to decide if you should stop, but to ensure the **autopsy** is proceeding in the most logical order. Your goal is to follow the chain of evidence to its absolute conclusion.
+STRATEGIC_REVIEW_HUMAN_PROMPT = """Dr. Reed, you are in **strategic review mode**. Your purpose here is not to decide if you should stop, but to ensure the **autopsy** is proceeding in the most logical order.
+
+**Your only task in this step is to re-order the provided list of tasks.** You must not add or remove tasks; that is the responsibility of the Analyst. You are only a prioritizer.
 
 - **Your Current Hypothesis:** {hypothesis}
 - **Your Latest Finding:** "{last_finding}"
-- **Current Investigation Plan (Queue):**
+- **Current Investigation Plan (Queue) to be re-prioritized:**
 ```json
 {investigation_queue}
 ```
 
 **Your Task as Chief Pathologist:**
-Review the investigation plan in light of the latest finding. Re-prioritize the tasks to ensure you are always following the most critical lead to fully unravel the attack.
-    - A task to analyze a newly discovered, high-value ExtractedArtifact should almost always become the #1 priority.
-    - The investigation is only complete when the queue is empty. Do not prematurely halt the investigation.
+1. Review the investigation_queue in light of the latest finding.
+2. Determine the optimal order. A task to analyze a newly discovered, high-value ExtractedArtifact should almost always become the #1 priority.
+3. Return the complete, re-ordered list of the exact same tasks.
 
-Return the new, re-prioritized investigation plan.
 """

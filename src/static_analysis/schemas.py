@@ -74,7 +74,7 @@ class ToolCallLog(BaseModel):
 class ForensicCaseFile(BaseModel):
     file_path: str
     file_hash_sha256: Optional[str] = None
-    analysis_session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    analysis_session_id: str = Field(default_factory=lambda: str(uuid.uuid4()) + "_" + datetime.now().strftime("%Y%m%d_%H%M%S"))
     verdict: Verdict = Field(Verdict.PRESUMED_INNOCENT)
     phase: AnalysisPhase = Field(AnalysisPhase.TRIAGE)
     narrative_coherence: NarrativeCoherence = Field(default_factory=NarrativeCoherence)
@@ -123,6 +123,6 @@ class InterrogationAnalysis(BaseModel):
 
 class StrategicReview(BaseModel):
     """Schema for the strategic review of the investigation plan."""
-    updated_queue: List[InvestigationTask] = Field(..., description="The new, re-prioritized investigation plan based on the latest evidence.")
+    reprioritized_queue: List[InvestigationTask] = Field(..., description="The original list of tasks, re-ordered by priority.")
     updated_hypothesis: str = Field(..., description="Your updated working hypothesis, reflecting the new findings.")
     reasoning: str = Field(..., description="A brief summary of why you are or are not changing the plan.")
