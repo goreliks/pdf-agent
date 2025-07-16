@@ -25,11 +25,11 @@ class AnalysisPhase(str, Enum):
 
 class InvestigationTask(BaseModel):
     task_id: str = Field(default_factory=lambda: f"task_{uuid.uuid4().hex[:8]}", description="Unique identifier for the task.")
-    object_id: int = Field(..., description="The PDF object number to investigate. Use 0 if unknown.")
+    object_id: Optional[int] = Field(None, description="The PDF object number to investigate, if the task is object-specific.")
     priority: int = Field(..., description="Priority of the task (1=Highest, 10=Lowest).")
     reason: str = Field(..., description="A clear, concise description of the investigative goal for this task.")
+    context_data: Optional[str] = Field(None, description="Contextual data required to execute the task, used when an object_id is not applicable.")
 
-# ... (Other Pydantic models from the previous version remain unchanged) ...
 class NarrativeCoherence(BaseModel):
     score: float = Field(1.0, description="Coherence score from 0.0 (deceptive) to 1.0 (coherent).")
     notes: List[str] = Field(default_factory=list, description="Observations that affect coherence.")

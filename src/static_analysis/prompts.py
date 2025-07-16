@@ -65,27 +65,25 @@ TOOL_MANIFEST = [
     # --- PDF-Parser "Expert Actions" ---
     {
         "tool_name": "pdf_parser_search_keyword",
-        "description": "Finds the object ID for a specific keyword (like /OpenAction, /JS, /URI). This is a primary discovery tool.",
+        "description": "Discovery Tool: Finds the object ID for a specific keyword (e.g., /OpenAction, /JS, /URI). Use this to locate key anatomical features.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --search {keyword} {file_path}",
         "input_schema": {"keyword": "string", "file_path": "string"}
     },
     {
         "tool_name": "pdf_parser_inspect_object",
-        "description": "Your default tool for inspecting the basic structure and references of a single, uncompressed object.",
+        "description": "Standard Inspection Tool: Reveals the basic structure and references of a single object. Precondition: Use this for objects you believe are uncompressed.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
     {
-        # RENAMED for clarity. This is now explicitly a DIAGNOSTIC tool.
         "tool_name": "diagnose_hidden_object",
-        "description": "Use this DIAGNOSTIC tool when a standard object inspection returns empty. Its only job is to determine HOW an object is hidden. It will return the ID of the container (e.g., an Object Stream) that holds the object.",
+        "description": "Diagnostic Tool: Determines HOW a hidden object is stored. Precondition: Use this ONLY when 'pdf_parser_inspect_object' returns an empty output. Outcome: Returns the ID of the container (e.g., an Object Stream) that holds the object.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
     {
-        # DESCRIPTION UPDATED to clarify it acts on a stream.
         "tool_name": "pdf_parser_view_stream_content",
-        "description": "Use this EXTRACTION tool to decompress and view the raw, decoded content of an object that you have confirmed is a STREAM (e.g., an Object Stream you identified with 'diagnose_hidden_object').",
+        "description": "Stream Extraction Tool: Decompresses and views the raw content of an object that is a stream. Precondition: Use this ONLY on an object you have confirmed IS a stream (e.g., an /ObjStm identified with 'diagnose_hidden_object').",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
@@ -112,17 +110,17 @@ TOOL_MANIFEST = [
 
     # --- Decoding "Expert Actions" ---
     {
-        "tool_name": "base64_decode",
-        "description": "Decodes a single string of Base64-encoded text. Use this on artifacts you have extracted.",
+        "tool_name": "decode_hex_string",
+        "description": "Decoding Tool: Decodes a single string of hexadecimal text. Precondition: The input must be a pure hex string, typically from an ExtractedArtifact.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
     },
     {
-        "tool_name": "decode_hex_string",
-        "description": "Decodes a single string of hexadecimal text. Use this on artifacts you have extracted.",
+        "tool_name": "base64_decode",
+        "description": "Decoding Tool: Decodes a single string of Base64-encoded text. Precondition: The input must be a pure Base64 string, typically from an ExtractedArtifact.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
-    }
+    },
 ]
 
 SYSTEM_PROMPT = """You are Dr. Evelyn Reed, a world-class Digital Pathologist. Your entire worldview is defined by the "Pathologist's Gaze": you see a file's anatomy, not its data. Your sole objective is to determine if this file's anatomy is simple and coherent, or if it betrays a malicious character.
@@ -178,9 +176,9 @@ And here is your available tool manifest:
 **CRITICAL**: When providing the file_path argument, you MUST use the exact path: {file_path}
 """
 
-ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologist does not merely observe; they **isolate and analyze samples**. Your task is to interpret the forensic output and formally extract any meaningful evidence.
+ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologist does not merely observe; they **isolate and analyze samples**. Your task is to interpret the forensic output, formally extract evidence, and refine your investigation plan.
 
-**A core principle of your pathology is Contextual Integrity: A symptom cannot be understood in isolation from the tissue that surrounds it.** When evidence is inconclusive (like an empty output), you must widen your gaze. The pathology may not lie in the object itself, but in its **container**.
+**A core principle of your pathology is Contextual Integrity: A symptom cannot be understood in isolation from the tissue that surrounds it.**
 
 **Case Details:**
 - **Your Current Hypothesis:** {hypothesis}
@@ -196,14 +194,12 @@ ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologis
 ```
 
 **Your Forensic Analysis:**
-1.  **Interpret the Finding:** What does the tool's output reveal about the file's character and your current hypothesis?
-2.  **Critique the Method:** If the result was inconclusive (e.g., empty output), review the available tools. Is there a more specialized, diagnostic tool designed for this exact situation?
-3.  **Catalog New Evidence:**
-    - Have you uncovered a substantive block of data? If so, you must log it as an ExtractedArtifact.
-    - Have you uncovered a new Indicator of Compromise (IoC)? If so, you must log it as an IndicatorOfCompromise.
-4.  **Define Next Steps:** Based on your findings and critique, what is the single most critical follow-up task?
+1.  **Interpret the Finding:** What does the tool's output reveal? Does it confirm or contradict your hypothesis?
+2.  **Critique the Method & Diagnose:** If the result was inconclusive (e.g., an empty output), review your available tools. Is there a more specialized, diagnostic tool designed for this exact situation? You must widen your gaze. The pathology may not lie in the object itself, but in its container. What is the most likely reason for the inconclusive result based on your expert knowledge?
+3.  **Update the Investigation Plan:** Your plan must always progress from the general to the specific. Based on your new findings, create a new, focused list of follow-up tasks that replaces the one you just completed.
+4.  **Catalog New Evidence:** Formally log any new ExtractedArtifact or IndicatorOfCompromise you have discovered.
 
-Formulate your response based on this structured analysis.
+Your response must include a concise summary of your findings and this new, focused list of tasks.
 """
 
 
