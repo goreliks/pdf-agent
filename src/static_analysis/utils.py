@@ -1,4 +1,5 @@
 import hashlib
+import re
 from typing import List
 import subprocess
 import os
@@ -47,6 +48,21 @@ def create_llm_chain(system_prompt: str, human_prompt: str, response_model: Base
     
     # Create chain: prompt -> llm -> parser
     return prompt | llm | parser
+
+
+def _extract_hex_from_string_tool(input_string: str) -> Dict[str, Any]:
+    """Extracts a hexadecimal string from a line of text, removing delimiters."""
+    # This regex finds hex strings that are often inside <...>
+    match = re.search(r'<([a-fA-F0-9]+)>', input_string)
+    if match:
+        return {"stdout": match.group(1), "stderr": "", "return_code": 0}
+    
+    # Fallback for hex strings not in brackets
+    match = re.search(r'[a-fA-F0-9]{40,}', input_string)
+    if match:
+        return {"stdout": match.group(0), "stderr": "", "return_code": 0}
+
+    return {"stdout": "", "stderr": "ERROR: No hexadecimal string found.", "return_code": 1}
 
 
 def _run_shell_command(command: List[str]) -> Dict[str, Any]:
@@ -116,7 +132,8 @@ class ToolExecutor:
         self._tools = {tool['tool_name']: tool for tool in manifest}
         self._python_functions = {
             "base64_decode": _base64_decode_tool,
-            "decode_hex_string": _decode_hex_string_tool
+            "decode_hex_string": _decode_hex_string_tool,
+            "extract_hex_from_string": _extract_hex_from_string_tool
         }
 
     def run(self, tool_name: str, arguments: Dict[str, Any]) -> ToolCallLog:

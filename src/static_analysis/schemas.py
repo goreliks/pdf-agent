@@ -1,7 +1,7 @@
 import operator
 import uuid
 from enum import Enum
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Set
 from pydantic import BaseModel, Field
 from typing_extensions import Annotated
 from datetime import datetime
@@ -24,6 +24,7 @@ class AnalysisPhase(str, Enum):
     FINALIZING = "Finalizing"
 
 class InvestigationTask(BaseModel):
+    # TODO: Solve tasks - ["task_1", "inspect_openaction_object", "inspect_acroform_object", "task_3", "1", "task_2", "inspect_hidden_object_content_7", "decode_hex_string_1"]
     task_id: str = Field(default_factory=lambda: f"task_{uuid.uuid4().hex[:8]}", description="Unique identifier for the task.")
     object_id: Optional[int] = Field(None, description="The PDF object number to investigate, if the task is object-specific.")
     artifact_id: Optional[str] = Field(None, description="The ID of a specific artifact from the evidence locker to be analyzed.")
@@ -32,7 +33,7 @@ class InvestigationTask(BaseModel):
     context_data: Optional[str] = Field(None, description="Contextual data for tasks not related to a specific artifact (e.g., a keyword search).")
 
 class NarrativeCoherence(BaseModel):
-    score: float = Field(1.0, description="Coherence score from 0.0 (deceptive) to 1.0 (coherent).")
+    score: float = Field(1.0, description="Incoherence score from 0.0 (coherent) to 1.0 (deceptive).")
     notes: List[str] = Field(default_factory=list, description="Observations that affect coherence.")
 
 class AttackChainLink(BaseModel):
@@ -85,6 +86,7 @@ class ForensicCaseFile(BaseModel):
     current_hypothesis: Optional[str] = Field(None, description="The current working theory of the primary threat vector.")
     last_finding: Optional[str] = Field(None, description="A summary of the most recent finding to inform the strategic review.")
     investigation_queue: List[InvestigationTask] = Field(default_factory=list)
+    completed_task_ids: Annotated[Set[str], operator.ior] = Field(default_factory=set, description="A set of task IDs that have already been completed to prevent re-execution.")
     evidence: EvidenceLocker = Field(default_factory=EvidenceLocker)
     analysis_trail: Annotated[List[str], operator.add] = Field(default_factory=list)
     errors: Annotated[List[str], operator.add] = Field(default_factory=list)
@@ -105,6 +107,7 @@ class TriageAnalysis(BaseModel):
     investigation_queue: List[InvestigationTask] = Field(..., description="A priority-ordered list of tasks for the next phase.")
     analysis_trail: str = Field(..., description="A single, concise log entry summarizing your findings and decision, written in your persona's voice.")
     narrative_coherence_notes: List[str] = Field(..., description="Notes on why the file's 'character' seems suspicious or benign.")
+    coherence_score: float = Field(..., description="Your initial assessment of the file's coherence from 0.0 (highly deceptive/incoherent) to 1.0 (perfectly coherent and benign).")
 
 
 class ToolAndTaskSelection(BaseModel):
@@ -127,6 +130,7 @@ class InterrogationAnalysis(BaseModel):
 
 class StrategicReview(BaseModel):
     """Schema for the strategic review of the investigation plan."""
-    reprioritized_queue: List[InvestigationTask] = Field(..., description="The original list of tasks, re-ordered by priority.")
+    updated_queue: List[InvestigationTask] = Field(..., description="The investigation queue, updated to reflect the latest finding. This involves removing completed or now-irrelevant tasks, refining existing tasks, and adding new ones as needed.")
     updated_hypothesis: str = Field(..., description="Your updated working hypothesis, reflecting the new findings.")
-    reasoning: str = Field(..., description="A brief summary of why you are or are not changing the plan.")
+    reasoning: str = Field(..., description="A brief summary of why you are changing the plan, describing the strategic shift. (e.g., 'Pruning redundant data-finding tasks now that the primary payload has been identified. Refining focus to post-exploitation analysis.')")
+    updated_coherence_score: float = Field(..., description="The new coherence score, adjusted based on the latest finding.")
