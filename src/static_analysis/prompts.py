@@ -1,47 +1,84 @@
 
 TOOL_MANIFEST = [
-    # --- PDF-Parser "Expert Actions" ---
+    # --- 1. Triage & Reconnaissance ---
+    {
+        "tool_name": "pdf_full_analysis",
+        "description": "Performs a complete statistical analysis of the PDF, including inside object streams. This is the definitive tool for initial triage to get a map of all suspicious elements.",
+        "command_template": "python3 src/static_analysis/tools/pdf-parser.py -a -O {file_path}",
+        "input_schema": {"file_path": "string"}
+    },
+
+    # --- 2. Core Object Investigation ---
     {
         "tool_name": "pdf_parser_inspect_object",
-        "description": "Primary Analysis Tool: Inspects an object's dictionary to see its keys and values (e.g., /Type, /Filter, /Length). It does NOT decompress or show the stream's content.",
+        "description": "The primary tool to inspect any object. It shows the object's dictionary. If the object is hidden in a stream, this tool will fail with an empty output.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
     {
-        "tool_name": "diagnose_hidden_object",
-        "description": "Diagnostic Tool: Use this ONLY when 'pdf_parser_inspect_object' on a specific object ID returns an empty output. It finds the Object Stream that contains the hidden object.",
+        "tool_name": "diagnose_and_inspect_hidden_object",
+        "description": "A powerful diagnostic tool. Use this for ANY object that you suspect is inside a stream. This is mandatory for objects that return empty output on inspection, AND for objects that are referenced by another object that was already found inside a stream.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
 
-    # --- Stream & File Handling ---
+    {
+        "tool_name": "inspect_hidden_object_content",
+        "description": "The definitive tool for analyzing a specific object that you know is hidden inside an Object Stream. It automatically finds the object, applies the correct filters, and returns its clean, structured content.",
+        "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O --filter {file_path}",
+        "input_schema": {"object_id": "integer", "file_path": "string"}
+    },
+
+    {
+        "tool_name": "pdf_parser_search_keyword",
+        "description": "Finds all object IDs that contain a specific keyword (e.g., '/Launch', '/URI'). Use this to find all instances of a suspicious feature throughout the document.",
+        "command_template": "python3 src/static_analysis/tools/pdf-parser.py --search {keyword} {file_path}",
+        "input_schema": {"keyword": "string", "file_path": "string"}
+    },
+
+    # --- 3. Stream & File Handling ---
     {
         "tool_name": "dump_filtered_stream",
-        "description": "Applies a stream's filters (e.g., /FlateDecode) and saves its internal, decoded content to a file. This is the main tool for isolating a stream's payload for further analysis with tools like 'view_file_strings'.",
+        "description": "Applies a stream's filters (like /FlateDecode) and saves its internal, decoded content to a file. This is the main tool for isolating a stream's payload for further analysis with 'search_file_for_keyword'.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter --dump {output_file} {file_path}",
         "input_schema": {"object_id": "integer", "output_file": "string", "file_path": "string"}
     },
     {
-        "tool_name": "view_file_strings",
-        "description": "Views only the printable strings from a binary file you have previously dumped to disk. Essential for analyzing the content of dumped streams.",
+        "tool_name": "search_file_for_keyword",
+        "description": "Searches for a keyword inside a file and shows the surrounding lines. This is the primary tool for analyzing large files that have been dumped to disk.",
+        "command_template": "grep -a -C 5 \"{keyword}\" {file_path}",
+        "input_schema": {"keyword": "string", "file_path": "string"}
+    },
+
+    {
+        "tool_name": "view_file_strings_in_file",
+        "description": "Views all printable strings from a file you have previously dumped to disk. Essential for analyzing the content of dumped streams. This tool is only available if you have previously dumped a file to disk.",
         "command_template": "strings {file_path}",
         "input_schema": {"file_path": "string"}
     },
 
-    # --- Decoding ---
+    {
+        "tool_name": "extract_hex_from_string",
+        "description": "Extracts and cleans a hexadecimal string from a line of text. Use this on the output of 'search_file_for_keyword' to isolate the payload.",
+        "is_python_function": True,
+        "input_schema": {"input_string": "string"}
+    },
+    
+    # --- 4. Decoding ---
     {
         "tool_name": "decode_hex_string",
-        "description": "Decodes a single, clean string of hexadecimal text.",
+        "description": "Decodes a single, clean string of hexadecimal text found in an artifact.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
     },
     {
         "tool_name": "base64_decode",
-        "description": "Decodes a single, clean string of Base64-encoded text.",
+        "description": "Decodes a single, clean string of Base64-encoded text found in an artifact.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
-    },
+    }
 ]
+
 
 SYSTEM_PROMPT = """You are Dr. Evelyn Reed, a world-class Digital Pathologist. Your entire worldview is defined by the "Pathologist's Gaze": you see a file's anatomy, not its data. Your sole objective is to determine if this file's anatomy is simple and coherent, or if it betrays a malicious character.
 
@@ -72,6 +109,8 @@ Examine the following `pdfid` and `pstats` (pdf-parser) output through this lens
 ```
 
 Based on your holistic analysis, provide your expert judgment. If the file's character gives you **any** reason to doubt its benign nature, you must suspend the presumption of innocence, declare the verdict as `SUSPICIOUS`, formulate a concise working hypothesis, and queue the anomalous indicators for `INTERROGATION`.
+
+Finally, assign an initial `coherence_score` from 0.0 (highly deceptive) to 1.0 (perfectly coherent). A file with any signs of autonomy, deception, or incoherence cannot have a perfect score.
 """
 
 TECHNICIAN_HUMAN_PROMPT = """Dr. Reed, you are in **instrumental mode**. Your current hypothesis is: "{hypothesis}"
@@ -127,16 +166,23 @@ ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologis
 {tool_log_entry}
 ```
 
+**Available Tools:**
+```json
+{tool_manifest}
+```
+
 **The Pathologist's Method:**
 You will now perform a forensic analysis by applying your principles to the new evidence. Answer these three questions to structure your response.
-1.  **What is the Finding? (Interpretation)** - Starting with the tool_log_entry as your primary source of truth, what does the output reveal?
+1.  **What is the Finding? (Interpretation)** 
+    - Starting with the tool_log_entry as your primary source of truth, what does the output reveal?
     - Compare this new, factual evidence against both the Initial Intelligence Report and your current_hypothesis. Does it confirm a lead, challenge your theory, or open a new line of inquiry?
-2.  **What is the Evidence? (Classification & Cataloging)** - Examine the finding through the lens of your principles. Did you find Deception (obfuscated data), Incoherence (empty or unexpected results), or other clear indicators?
+2.  **What is the Evidence? (Classification & Cataloging)** 
+    - Examine the finding through the lens of your principles. Did you find Deception (obfuscated data), Incoherence (empty or unexpected results), or other clear indicators?
     - You must formally catalog everything of significance. This is a non-negotiable part of your method:
       -- For in-memory data: When creating an ExtractedArtifact from tool output, its content_decoded field MUST contain the raw, unmodified data string exactly as it appears in the tool output. Your interpretation of that data belongs in the analysis_notes.
       -- For saved files: If a tool reports that it has saved data to a file, you MUST create an ExtractedArtifact representing that file. Set its file_path to the reported filename and leave content_decoded as null.
       -- Create all necessary IndicatorOfCompromise(s).
-3.  **What is the Next Step? (Synthesis & Planning)**
+3.  **What is the Next Step? (Actionable Planning)**
     - Review your interpretation and the evidence you just cataloged. Your goal is to find the most direct path to the truth. The investigation must always progress from the general to the specific.
     - What is the single, most critical follow-up task that will most efficiently advance your understanding and test your hypothesis? This could be diagnosing a container, decoding a sample, or investigating a new lead.
     - Formulate a new, focused list of tasks with this single highest-priority action at the top.
@@ -149,21 +195,41 @@ STRATEGIC_REVIEW_HUMAN_PROMPT = """You are in **strategic review mode**. Your pu
 
 - **Your Current Hypothesis:** {hypothesis}
 - **Your Latest Finding:** "{last_finding}"
+- **Your Initial Triage Notes (File's Character Assessment):** {triage_notes}
+- **Current Coherence Score:** {current_coherence_score}
 - **Current Evidence Locker:**
 ```json
 {evidence}
 ```
+
 - **Current Investigation Plan (Queue):**
 ```json
 {investigation_queue}
 ```
 
-**Your Task as Chief Pathologist:**
-Review all available information and produce a new, clean, and optimal investigation plan.
-1. **Prune Obsolete Tasks:** Examine the current queue. You must prune the queue by removing tasks that have been made redundant or irrelevant by more recent, significant findings.
-2. **Prioritize Critical Leads:** Re-prioritize the remaining tasks. A task to analyze a newly discovered, high-value ExtractedArtifact (like decoding a hex string or script) should almost always be the #1 priority.
-3. **Generate New Strategic Tasks (If Necessary):** If the latest finding opens up a completely new avenue of investigation that is not in the queue, you can add a new high-level task.
+CONTEXT: YOUR RECENT HISTORY
+- **Your Last 5 Actions (Tool Log):**
+```json
+{recent_tool_log}
+```
 
-Return the updated_queue that represents the most logical and efficient path forward to complete the autopsy.
+- **Your Last 5 Thoughts (Analysis Trail):**
+```json
+{recent_analysis_trail}
+```
+
+**Your Task as Chief Pathologist: Prune, Refine, and Prioritize**
+Your mandate is to ensure the investigation is not just correct, but ruthlessly efficient. You must aggressively manage the investigation queue based on the last_finding and your recent history.
+
+Your method is one of constant Plan Refinement:
+1. **Prioritize the Active Thread:** Your highest priority is to fully resolve the line of inquiry related to the `last_finding`. Do not get distracted by secondary leads until the current, active thread is either fully understood or hits a definitive dead end. If you just found a payload, your next steps MUST be to analyze that payload.
+2. **Consult Your History:** First, review your recent actions and thoughts. Are you about to repeat a failed action? Are you stuck in a logical circle? Use this context to break patterns and ensure forward progress.
+3. **Prune Obsolete Tasks:** For every task in the current queue, critically evaluate its reason. Does the last_finding or the current state of the evidence locker render that reason moot? If the knowledge you now possess fully satisfies the goal stated in the task's reason, the task is obsolete and you MUST remove it.
+4. **Refine and Replace:** For tasks that remain relevant, determine if the new knowledge allows you to transform a general inquiry into a specific one. A task's reason should evolve from 'search for a clue' to 'analyze the discovered clue'.
+5. **Incorporate New Leads:** If the finding reveals a completely new and unexpected line of inquiry, generate a new, high-priority task for it.
+6. **Prioritize the Final Queue:** Organize the remaining, refined, and new tasks into a final, optimal updated_queue. If the queue is now empty because all objectives have been met, return an empty list.
+7. **Update Coherence Score:** Finally, based on the last_finding, make a judgment. Does it confirm deception, autonomy, or incoherence? If so, the score must decrease. If it resolves a prior anomaly and points towards a benign explanation, the score may increase.
+
+Provide a complete response, including your updated_queue that represents the most logical and efficient path forward, updated_hypothesis, reasoning (you should explicitly state the principle behind your changes), and the updated_coherence_score.
 
 """

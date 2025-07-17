@@ -45,7 +45,10 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "structural_summary": {"pdfid": pdfid_output, "pstats": stats_output}
     }
 
-    initial_narrative = {"notes": llm_response.narrative_coherence_notes}
+    initial_narrative = {
+        "notes": llm_response.narrative_coherence_notes,
+        "score": llm_response.coherence_score
+    }
     
     return {
         "verdict": llm_response.verdict,
@@ -100,7 +103,8 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "hypothesis": state.current_hypothesis,
         "task_reason": tool_selection.chosen_task.reason,
         "tool_log_entry": tool_log_entry.model_dump_json(),
-        "initial_report": json.dumps(state.evidence.structural_summary)
+        "initial_report": json.dumps(state.evidence.structural_summary),
+        "tool_manifest": json.dumps(TOOL_MANIFEST)
     })
     
     # Remove the completed task from the queue and add any new ones
@@ -134,7 +138,8 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "analysis_trail": [f"Interrogated '{tool_selection.chosen_task.reason}'. Finding: {analysis.findings_summary}"],
         "evidence": updated_evidence,  # Use the fully updated evidence object
         "tool_log": [tool_log_entry],
-        "interrogation_steps": current_steps
+        "interrogation_steps": current_steps,
+        "completed_task_ids": {tool_selection.chosen_task.task_id},
     }
     
     return updates
@@ -157,15 +162,30 @@ def strategic_review_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "hypothesis": state.current_hypothesis,
         "last_finding": state.last_finding,
         "investigation_queue": json.dumps([t.model_dump() for t in state.investigation_queue]),
-        "evidence": state.evidence.model_dump_json()
-    }) # REAL CALL
+        "evidence": state.evidence.model_dump_json(),
+        "recent_tool_log": json.dumps([log.model_dump() for log in state.tool_log[-5:]]),
+        "recent_analysis_trail": "\n".join(f"- {trail}" for trail in state.analysis_trail[-5:]),
+        "triage_notes": json.dumps(state.narrative_coherence.notes),
+        "current_coherence_score": state.narrative_coherence.score,
+    })
+
+    # Safety net: Filter out any tasks that have already been completed.
+    pruned_queue = [
+        task for task in review.updated_queue 
+        if task.task_id not in state.completed_task_ids
+    ]
     
     print(f"[*] Review complete. Reasoning: {review.reasoning}")
 
+    updated_narrative_coherence = state.narrative_coherence.model_copy(
+        update={"score": review.updated_coherence_score}
+    )
+
     return {
-        "investigation_queue": review.reprioritized_queue,
+        "investigation_queue": pruned_queue,
         "current_hypothesis": review.updated_hypothesis,
         "analysis_trail": [f"Strategic Review: {review.reasoning}"],
+        "narrative_coherence": updated_narrative_coherence,
     }
 
 
@@ -257,27 +277,18 @@ def main():
     print("\n--- Streaming Agent Execution ---")
     
     final_state_dict = None
-    # Use the stream to get real-time updates and capture the final state
-    for event in app.stream(inputs.model_dump()):
-        # The event is a dictionary where the key is the node name and the value is the full state
-        # after that node has run. We print it for real-time viewing.
-        for node_name, state_update in event.items():
-            print(f"--- Output from node '{node_name}' ---")
-            # The last state update we receive will be the final state of the graph
-            final_state_dict = state_update
-            # We don't need to print the full state here, the node prints are enough
-            # print(json.dumps(final_state_dict, indent=2, default=str))
+    # Use stream with "values" mode to get accumulated state at each step
+    for event in app.stream(inputs.model_dump(), stream_mode="values"):
+        # In "values" mode, event is the complete accumulated state after each node
+        print(f"--- Node completed, current accumulated state available ---")
+        final_state_dict = event  # This will be the complete state, not just partial updates
         print("\n--------------------------------\n")
 
-    if final_state_dict:
-        print("--- Agent execution finished. Processing final state. ---")
-        # The final state is already captured in the dictionary
-        final_state = ForensicCaseFile(**final_state_dict)
-        
-        print("\n\n--- Final Graph State (also saved to file by finalize_node) ---")
-        print(final_state.model_dump_json(indent=2))
-    else:
-        print("--- Agent execution did not produce a final state. ---")
+    print("--- Agent execution finished. Processing final state. ---")
+    final_state = ForensicCaseFile(**final_state_dict)
+    
+    print("\n\n--- Final Graph State (also saved to file by finalize_node) ---")
+    print(final_state.model_dump_json(indent=2))
 
 if __name__ == "__main__":
     main()
