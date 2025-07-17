@@ -24,6 +24,7 @@ class AnalysisPhase(str, Enum):
     FINALIZING = "Finalizing"
 
 class InvestigationTask(BaseModel):
+    # TODO: Solve tasks - ["task_1", "inspect_openaction_object", "inspect_acroform_object", "task_3", "1", "task_2", "inspect_hidden_object_content_7", "decode_hex_string_1"]
     task_id: str = Field(default_factory=lambda: f"task_{uuid.uuid4().hex[:8]}", description="Unique identifier for the task.")
     object_id: Optional[int] = Field(None, description="The PDF object number to investigate, if the task is object-specific.")
     artifact_id: Optional[str] = Field(None, description="The ID of a specific artifact from the evidence locker to be analyzed.")
