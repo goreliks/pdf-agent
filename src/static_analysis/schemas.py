@@ -26,23 +26,27 @@ class AnalysisPhase(str, Enum):
 class InvestigationTask(BaseModel):
     task_id: str = Field(default_factory=lambda: f"task_{uuid.uuid4().hex[:8]}", description="Unique identifier for the task.")
     object_id: Optional[int] = Field(None, description="The PDF object number to investigate, if the task is object-specific.")
+    artifact_id: Optional[str] = Field(None, description="The ID of a specific artifact from the evidence locker to be analyzed.")
     priority: int = Field(..., description="Priority of the task (1=Highest, 10=Lowest).")
     reason: str = Field(..., description="A clear, concise description of the investigative goal for this task.")
-    context_data: Optional[str] = Field(None, description="Contextual data required to execute the task, used when an object_id is not applicable.")
+    context_data: Optional[str] = Field(None, description="Contextual data for tasks not related to a specific artifact (e.g., a keyword search).")
 
 class NarrativeCoherence(BaseModel):
     score: float = Field(1.0, description="Coherence score from 0.0 (deceptive) to 1.0 (coherent).")
     notes: List[str] = Field(default_factory=list, description="Observations that affect coherence.")
 
 class AttackChainLink(BaseModel):
-    source_object: int = Field(..., description="The PDF object that initiates the action.")
-    action: str = Field(..., description="The relationship (e.g., 'Executes', 'References', 'Decodes').")
-    target_object: int = Field(..., description="The PDF object that is the target of the action.")
+    source: str = Field(..., description="The identifier for the source of the action (e.g., 'Object 7', 'Artifact <id>').")
+    action: str = Field(..., description="The relationship (e.g., 'Executes', 'References', 'DownloadsFrom').")
+    target: str = Field(..., description="The identifier for the target of the action (e.g., 'Object 12', 'Operating System', a URL, or a filename).")
     description: str = Field(..., description="Human-readable summary of the link.")
 
 class ExtractedArtifact(BaseModel):
+    artifact_id: str = Field(default_factory=lambda: f"art_{uuid.uuid4().hex[:8]}", description="Unique identifier for this artifact.")
     source_object_id: int = Field(..., description="The PDF object from which this was extracted.")
-    content_decoded: str = Field(..., description="The decoded/deobfuscated content.")
+    content_decoded: Optional[str] = Field(None, description="The decoded/deobfuscated content, if in memory.")
+    file_path: Optional[str] = Field(None, description="The path to the file where this artifact is stored, if dumped to disk.")
+    encoding: str = Field(..., description="A classification of the content's apparent encoding. If the data appears intentionally obscured, label its type. This classification dictates the next analytical step.")
     analysis_notes: List[str] = Field(default_factory=list, description="Notes from the analysis of this artifact.")
 
 class IndicatorOfCompromise(BaseModel):
@@ -53,7 +57,7 @@ class IndicatorOfCompromise(BaseModel):
 class EvidenceLocker(BaseModel):
     structural_summary: Dict[str, Any] = Field(default_factory=dict, description="Raw, parsed output from the initial triage tool (e.g., pdfid).")
     attack_chain: List[AttackChainLink] = Field(default_factory=list)
-    extracted_artifacts: Dict[int, ExtractedArtifact] = Field(default_factory=dict)
+    extracted_artifacts: Dict[str, ExtractedArtifact] = Field(default_factory=dict)
     indicators_of_compromise: List[IndicatorOfCompromise] = Field(default_factory=list)
 
 class ForensicCaseFileInput(BaseModel):
@@ -116,7 +120,7 @@ class InterrogationAnalysis(BaseModel):
     findings_summary: str = Field(..., description="A concise summary of what the tool output reveals.")
     new_tasks: List[InvestigationTask] = Field(..., description="A list of new, specific, high-priority follow-up tasks discovered during this analysis.")
     attack_chain_additions: List[AttackChainLink] = Field(..., description="Any new links to add to the attack chain map.")
-    extracted_artifacts_additions: List[ExtractedArtifact] = Field(default_factory=list, description="A list of substantive data blocks (scripts, payloads, etc.) found in the output to be added to the evidence locker.")
+    extracted_artifacts_additions: Dict[str, ExtractedArtifact] = Field(default_factory=dict, description="A dictionary of new substantive data blocks (scripts, payloads, etc.) keyed by their new artifact_id.")
     new_indicators_of_compromise: List[IndicatorOfCompromise] = Field(default_factory=list, description="A list of new, concrete IoCs (URLs, domains, etc.) found in the output.")
 
 

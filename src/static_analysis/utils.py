@@ -149,6 +149,13 @@ class ToolExecutor:
             return ToolCallLog(tool_name=tool_name, arguments=arguments, command_str="", stdout="", stderr=f"ERROR: Failed to format command for tool '{tool_name}': {e}", return_code=-1)
 
         result = _run_shell_command(command_parts)
+
+        # This block checks if the dump tool ran successfully. If so, it creates our custom confirmation message for the Analyst agent to see.
+        if tool_name == "dump_filtered_stream" and result["return_code"] == 0:
+            object_id = arguments.get("object_id")
+            output_file = arguments.get("output_file")
+            result["stdout"] = f"Successfully dumped stream from object {object_id} to file: {output_file}"
+
         return ToolCallLog(tool_name=tool_name, arguments=arguments, command_str=command_str_formatted, **result)
 
 
@@ -166,6 +173,18 @@ def run_pdfid(pdf_filename: str) -> str:
 
 
     command_parts = [sys.executable, pdfid_path, "-e", "-f", pdf_filename]
+    result = _run_shell_command(command_parts)
+    return result['stdout'] or f"Tool executed with no output. Stderr: {result['stderr']}"
+
+
+def run_pdf_parser_full_statistical_analysis(pdf_filename: str) -> str:
+    """Runs the pdf-parser.py tool with -a flag."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Tools are in a subdirectory of the current module
+    tools_dir = os.path.join(script_dir, "tools")
+    pdf_parser_path = os.path.join(tools_dir, "pdf-parser.py")
+
+    command_parts = [sys.executable, pdf_parser_path, "-a", "-O",pdf_filename]
     result = _run_shell_command(command_parts)
     return result['stdout'] or f"Tool executed with no output. Stderr: {result['stderr']}"
 

@@ -13,7 +13,7 @@ from static_analysis.prompts import (
     SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TECHNICIAN_HUMAN_PROMPT,
     ANALYST_HUMAN_PROMPT, STRATEGIC_REVIEW_HUMAN_PROMPT, TOOL_MANIFEST
 )
-from static_analysis.utils import create_llm_chain, run_pdfid, ToolExecutor
+from static_analysis.utils import create_llm_chain, run_pdfid, run_pdf_parser_full_statistical_analysis, ToolExecutor
 
 
 # --- TOOL EXECUTOR INSTANTIATED ---
@@ -32,16 +32,20 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
     """
     print("\n--- Running Triage Node ---")
     pdfid_output = run_pdfid(state.file_path)
-    print(f"[*] PDFID Output: {pdfid_output}")
+    stats_output = run_pdf_parser_full_statistical_analysis(state.file_path)
+    triage_context = f"--- PDFID ANALYSIS ---\n{pdfid_output}\n\n--- STATISTICAL ANALYSIS ---\n{stats_output}"
+    print(f"[*] Combined Triage Output:\n{triage_context}")
     chain = create_llm_chain(SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TriageAnalysis)
 
     print("[*] Dr. Reed is performing initial triage...")
-    llm_response = chain.invoke({"pdfid_output": pdfid_output})
+    llm_response = chain.invoke({"triage_context": triage_context})
 
-    # Create an initial EvidenceLocker with the pdfid results
+    # Create an initial EvidenceLocker
     initial_evidence = {
-        "structural_summary": {"pdfid": pdfid_output}
+        "structural_summary": {"pdfid": pdfid_output, "pstats": stats_output}
     }
+
+    initial_narrative = {"notes": llm_response.narrative_coherence_notes}
     
     return {
         "verdict": llm_response.verdict,
@@ -50,6 +54,7 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "investigation_queue": llm_response.investigation_queue,
         "analysis_trail": [llm_response.analysis_trail],
         "evidence": initial_evidence,
+        "narrative_coherence": initial_narrative,
     }
 
 
@@ -66,16 +71,18 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         return {"errors": ["Interrogation node called with an empty queue."], "interrogation_steps": current_steps}
     
     # Provide the agent with a lookahead of the next few tasks
-    task_lookahead = state.investigation_queue[:3]
+    task_lookahead = state.investigation_queue[:5]
     
     print("[*] Dr. Reed is in instrumental mode (selecting task and tool)...")
     technician_chain = create_llm_chain(SYSTEM_PROMPT, TECHNICIAN_HUMAN_PROMPT, ToolAndTaskSelection)
     
+    # This invoke call is now correct and includes the evidence_locker
     tool_selection = technician_chain.invoke({
         "hypothesis": state.current_hypothesis,
         "file_path": state.file_path,
         "task_lookahead": json.dumps([t.model_dump() for t in task_lookahead]),
-        "tool_manifest": json.dumps(TOOL_MANIFEST)
+        "tool_manifest": json.dumps(TOOL_MANIFEST),
+        "evidence_locker": state.evidence.model_dump_json()
     })
     
     print(f"[*] Dr. Reed chose task: '{tool_selection.chosen_task.reason}'")
@@ -93,7 +100,7 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "hypothesis": state.current_hypothesis,
         "task_reason": tool_selection.chosen_task.reason,
         "tool_log_entry": tool_log_entry.model_dump_json(),
-        "tool_manifest": json.dumps(TOOL_MANIFEST) 
+        "initial_report": json.dumps(state.evidence.structural_summary)
     })
     
     # Remove the completed task from the queue and add any new ones
@@ -110,9 +117,14 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
     # Add any new Indicators of Compromise
     updated_evidence.indicators_of_compromise.extend(analysis.new_indicators_of_compromise)
     
-    # Add any new Extracted Artifacts to the locker, using the source object ID as the key
-    for artifact in analysis.extracted_artifacts_additions:
-        updated_evidence.extracted_artifacts[artifact.source_object_id] = artifact
+    # The analyst now returns a dictionary of artifacts keyed by their new artifact_id.
+    # We iterate through this dictionary to add them to the evidence locker.
+    if analysis.extracted_artifacts_additions:
+        for artifact_id, artifact in analysis.extracted_artifacts_additions.items():
+            # Ensure the artifact's ID from the dictionary key is stored in the object itself
+            artifact.artifact_id = artifact_id
+            # Use the unique artifact_id as the key in the evidence locker
+            updated_evidence.extracted_artifacts[artifact_id] = artifact
     # --- End of Evidence Processing ---
     
     # Prepare the final state update
@@ -144,7 +156,8 @@ def strategic_review_node(state: ForensicCaseFile) -> Dict[str, Any]:
     review = review_chain.invoke({
         "hypothesis": state.current_hypothesis,
         "last_finding": state.last_finding,
-        "investigation_queue": json.dumps([t.model_dump() for t in state.investigation_queue])
+        "investigation_queue": json.dumps([t.model_dump() for t in state.investigation_queue]),
+        "evidence": state.evidence.model_dump_json()
     }) # REAL CALL
     
     print(f"[*] Review complete. Reasoning: {review.reasoning}")
@@ -152,7 +165,7 @@ def strategic_review_node(state: ForensicCaseFile) -> Dict[str, Any]:
     return {
         "investigation_queue": review.reprioritized_queue,
         "current_hypothesis": review.updated_hypothesis,
-        "analysis_trail": [f"Strategic Review: {review.reasoning}"]
+        "analysis_trail": [f"Strategic Review: {review.reasoning}"],
     }
 
 

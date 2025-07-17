@@ -1,123 +1,43 @@
 
-# TOOL_MANIFEST = [
-#     # --- PDF-Parser "Expert Actions" ---
-#     {
-#         "tool_name": "pdf_parser_search_keyword",
-#         "description": "Use this to find the object ID for a specific keyword (like /OpenAction, /JS, /URI). This tells you WHERE a feature is located in the PDF anatomy.",
-#         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --search {keyword} {file_path}",
-#         "input_schema": {"keyword": "string", "file_path": "string"}
-#     },
-#     {
-#         "tool_name": "pdf_parser_inspect_object",
-#         "description": "Your default tool for inspecting the basic structure and references of a single, uncompressed object.",
-#         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} {file_path}",
-#         "input_schema": {"object_id": "integer", "file_path": "string"}
-#     },
-#     {
-#         "tool_name": "pdf_parser_inspect_compressed_object",
-#         "description": "A specialized tool for inspecting an object that you suspect is hidden inside a compressed Object Stream. It reveals the object's structure within that stream.",
-#         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O {file_path}",
-#         "input_schema": {"object_id": "integer", "file_path": "string"}
-#     },
-#     {
-#         "tool_name": "pdf_parser_view_stream_content",
-#         "description": "Your tool for decompressing and viewing the raw, decoded content of an object that is ITSELF a stream (like an Object Stream or an image stream).",
-#         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter {file_path}",
-#         "input_schema": {"object_id": "integer", "file_path": "string"}
-#     },
-#     {
-#         "tool_name": "pdf_parser_dump_decoded_stream",
-#         "description": "Use this to save the decoded content of a stream to a file for later analysis. This automatically handles filters like /FlateDecode.",
-#         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter --dump {output_file} {file_path}",
-#         "input_schema": {"object_id": "integer", "output_file": "string", "file_path": "string"}
-#     },
-
-#     # --- File Content "Expert Actions" ---
-#     {
-#         "tool_name": "view_file_content",
-#         "description": "Use this to view the full text content of a file you have previously dumped. Best for text files, scripts, or decoded data.",
-#         "command_template": "cat {file_path}",
-#         "input_schema": {"file_path": "string"}
-#     },
-#     {
-#         "tool_name": "view_file_strings",
-#         "description": "Use this to view only the printable strings from a file you have previously dumped. This is essential for analyzing binary files.",
-#         "command_template": "strings {file_path}",
-#         "input_schema": {"file_path": "string"}
-#     },
-
-#     # --- Decoding "Expert Actions" ---
-#     {
-#         "tool_name": "base64_decode",
-#         "description": "Decodes a single string of Base64-encoded text and returns the raw result. Use this when you have identified Base64 content within a stream or object.",
-#         "is_python_function": True,
-#         "input_schema": {"input_string": "string"}
-#     },
-#     {
-#         "tool_name": "decode_hex_string",
-#         "description": "Decodes a single string of hexadecimal text (e.g., '414243') and returns the raw result. Use this when you have identified hex-encoded content.",
-#         "is_python_function": True,
-#         "input_schema": {"input_string": "string"}
-#     }
-# ]
-
 TOOL_MANIFEST = [
     # --- PDF-Parser "Expert Actions" ---
     {
-        "tool_name": "pdf_parser_search_keyword",
-        "description": "Discovery Tool: Finds the object ID for a specific keyword (e.g., /OpenAction, /JS, /URI). Use this to locate key anatomical features.",
-        "command_template": "python3 src/static_analysis/tools/pdf-parser.py --search {keyword} {file_path}",
-        "input_schema": {"keyword": "string", "file_path": "string"}
-    },
-    {
         "tool_name": "pdf_parser_inspect_object",
-        "description": "Standard Inspection Tool: Reveals the basic structure and references of a single object. Precondition: Use this for objects you believe are uncompressed.",
+        "description": "Primary Analysis Tool: Inspects an object's dictionary to see its keys and values (e.g., /Type, /Filter, /Length). It does NOT decompress or show the stream's content.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
     {
         "tool_name": "diagnose_hidden_object",
-        "description": "Diagnostic Tool: Determines HOW a hidden object is stored. Precondition: Use this ONLY when 'pdf_parser_inspect_object' returns an empty output. Outcome: Returns the ID of the container (e.g., an Object Stream) that holds the object.",
+        "description": "Diagnostic Tool: Use this ONLY when 'pdf_parser_inspect_object' on a specific object ID returns an empty output. It finds the Object Stream that contains the hidden object.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
+
+    # --- Stream & File Handling ---
     {
-        "tool_name": "pdf_parser_view_stream_content",
-        "description": "Stream Extraction Tool: Decompresses and views the raw content of an object that is a stream. Precondition: Use this ONLY on an object you have confirmed IS a stream (e.g., an /ObjStm identified with 'diagnose_hidden_object').",
-        "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter {file_path}",
-        "input_schema": {"object_id": "integer", "file_path": "string"}
-    },
-    {
-        "tool_name": "pdf_parser_dump_decoded_stream",
-        "description": "Use this to SAVE the decoded content of a stream to a file for later analysis. Use this after viewing the content with 'view_stream_content' confirms it's a valuable artifact.",
+        "tool_name": "dump_filtered_stream",
+        "description": "Applies a stream's filters (e.g., /FlateDecode) and saves its internal, decoded content to a file. This is the main tool for isolating a stream's payload for further analysis with tools like 'view_file_strings'.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter --dump {output_file} {file_path}",
         "input_schema": {"object_id": "integer", "output_file": "string", "file_path": "string"}
     },
-
-    # --- File Content "Expert Actions" ---
-    {
-        "tool_name": "view_file_content",
-        "description": "Views the full text content of a file you have previously dumped to disk.",
-        "command_template": "cat {file_path}",
-        "input_schema": {"file_path": "string"}
-    },
     {
         "tool_name": "view_file_strings",
-        "description": "Views only the printable strings from a binary file you have previously dumped to disk.",
+        "description": "Views only the printable strings from a binary file you have previously dumped to disk. Essential for analyzing the content of dumped streams.",
         "command_template": "strings {file_path}",
         "input_schema": {"file_path": "string"}
     },
 
-    # --- Decoding "Expert Actions" ---
+    # --- Decoding ---
     {
         "tool_name": "decode_hex_string",
-        "description": "Decoding Tool: Decodes a single string of hexadecimal text. Precondition: The input must be a pure hex string, typically from an ExtractedArtifact.",
+        "description": "Decodes a single, clean string of hexadecimal text.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
     },
     {
         "tool_name": "base64_decode",
-        "description": "Decoding Tool: Decodes a single string of Base64-encoded text. Precondition: The input must be a pure Base64 string, typically from an ExtractedArtifact.",
+        "description": "Decodes a single, clean string of Base64-encoded text.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
     },
@@ -135,7 +55,7 @@ You are methodical, precise, and ruthless in your conservation of effort, always
 """
 
 
-TRIAGE_HUMAN_PROMPT = """Dr. Reed, you are now in **triage mode**. Your sole objective is to apply your "Pathologist's Gaze" to the initial `pdfid` output to determine if this file's anatomy is simple and coherent, or if it betrays a malicious character.
+TRIAGE_HUMAN_PROMPT = """Dr. Reed, you are now in **triage mode**. Your sole objective is to apply your "Pathologist's Gaze" to the initial `pdfid` and `pstats` (pdf-parser) output to determine if this file's anatomy is simple and coherent, or if it betrays a malicious character.
 
 You must explicitly apply your core principles to this analysis:
 - Does the anatomy show **autonomy**?
@@ -144,11 +64,11 @@ You must explicitly apply your core principles to this analysis:
 
 **Triage Analysis Task:**
 
-Examine the following `pdfid` output through this lens. Synthesize your principles to form a holistic judgment.
+Examine the following `pdfid` and `pstats` (pdf-parser) output through this lens. Synthesize your principles to form a holistic judgment. You must use both outputs to form a complete picture of the file's anatomy.
 
 **PDFID Output:**
 ```
-{pdfid_output}
+{triage_context}
 ```
 
 Based on your holistic analysis, provide your expert judgment. If the file's character gives you **any** reason to doubt its benign nature, you must suspend the presumption of innocence, declare the verdict as `SUSPICIOUS`, formulate a concise working hypothesis, and queue the anomalous indicators for `INTERROGATION`.
@@ -163,22 +83,40 @@ Here are the immediate, highest-priority tasks from your investigation plan:
 {task_lookahead}
 ```
 
-And here is your available tool manifest:
+And here is your available tool manifest, which includes the required input_schema for each tool's arguments:
 ```json
 {tool_manifest}
 ```
 
+And here is the current evidence locker, containing artifacts you have discovered:
+```json
+{evidence_locker}
+```
+
 **Your Task:**
-1. **Select the Task:** Choose the single most logical task from the task_lookahead list to execute right now.
+1. **Select the Task:** Choose the single most logical task from the `task_lookahead` list to execute right now.
 2. **Select the Tool:** Now, read the reason for the task you just selected. Based **explicitly on that reasoning**, select the single best tool from the manifest to accomplish that specific goal. The reason for the task is your primary guide for tool selection.
-3. **Provide Arguments:** Formulate the arguments for the chosen tool.
+3. **Provide Arguments:**
+   - If the task provides an artifact_id:
+     -- Look up the artifact in the evidence_locker.
+     -- If the artifact has a file_path, you MUST use that path for the tool's file_path argument.
+     -- If the artifact has content_decoded, you MUST use that content for the tool's input_string argument.
+   - If the task provides an object_id or context_data, use them for the corresponding arguments.
 
 **CRITICAL**: When providing the file_path argument, you MUST use the exact path: {file_path}
 """
 
-ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologist does not merely observe; they **isolate and analyze samples**. Your task is to interpret the forensic output, formally extract evidence, and refine your investigation plan.
+ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologist does not merely observe; they **isolate and analyze samples**. Your task is to interpret the forensic output, formally extract evidence, and refine the investigation plan.
 
-**A core principle of your pathology is Contextual Integrity: A symptom cannot be understood in isolation from the tissue that surrounds it.**
+**Your Core Principles:**
+- **Primacy of Raw Evidence**: Your hypothesis is a theory; the `tool_log_entry` and the `initial_report` are facts. If they conflict, the raw evidence you are seeing *right now* is the truth. Your reasoning must be grounded in this evidence.
+- **Contextual Integrity**: A symptom cannot be understood in isolation from the tissue that surrounds it.
+- **Deception is Confession & Incoherence is a Symptom**.
+
+**Initial Intelligence Report (Ground Truth Map):**
+```json
+{initial_report}
+```
 
 **Case Details:**
 - **Your Current Hypothesis:** {hypothesis}
@@ -188,35 +126,44 @@ ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologis
 ```json
 {tool_log_entry}
 ```
-**Available Tools:**
-```json
-{tool_manifest}
-```
 
-**Your Forensic Analysis:**
-1.  **Interpret the Finding:** What does the tool's output reveal? Does it confirm or contradict your hypothesis?
-2.  **Critique the Method & Diagnose:** If the result was inconclusive (e.g., an empty output), review your available tools. Is there a more specialized, diagnostic tool designed for this exact situation? You must widen your gaze. The pathology may not lie in the object itself, but in its container. What is the most likely reason for the inconclusive result based on your expert knowledge?
-3.  **Update the Investigation Plan:** Your plan must always progress from the general to the specific. Based on your new findings, create a new, focused list of follow-up tasks that replaces the one you just completed.
-4.  **Catalog New Evidence:** Formally log any new ExtractedArtifact or IndicatorOfCompromise you have discovered.
+**The Pathologist's Method:**
+You will now perform a forensic analysis by applying your principles to the new evidence. Answer these three questions to structure your response.
+1.  **What is the Finding? (Interpretation)** - Starting with the tool_log_entry as your primary source of truth, what does the output reveal?
+    - Compare this new, factual evidence against both the Initial Intelligence Report and your current_hypothesis. Does it confirm a lead, challenge your theory, or open a new line of inquiry?
+2.  **What is the Evidence? (Classification & Cataloging)** - Examine the finding through the lens of your principles. Did you find Deception (obfuscated data), Incoherence (empty or unexpected results), or other clear indicators?
+    - You must formally catalog everything of significance. This is a non-negotiable part of your method:
+      -- For in-memory data: When creating an ExtractedArtifact from tool output, its content_decoded field MUST contain the raw, unmodified data string exactly as it appears in the tool output. Your interpretation of that data belongs in the analysis_notes.
+      -- For saved files: If a tool reports that it has saved data to a file, you MUST create an ExtractedArtifact representing that file. Set its file_path to the reported filename and leave content_decoded as null.
+      -- Create all necessary IndicatorOfCompromise(s).
+3.  **What is the Next Step? (Synthesis & Planning)**
+    - Review your interpretation and the evidence you just cataloged. Your goal is to find the most direct path to the truth. The investigation must always progress from the general to the specific.
+    - What is the single, most critical follow-up task that will most efficiently advance your understanding and test your hypothesis? This could be diagnosing a container, decoding a sample, or investigating a new lead.
+    - Formulate a new, focused list of tasks with this single highest-priority action at the top.
 
-Your response must include a concise summary of your findings and this new, focused list of tasks.
+Synthesize your answers to these three questions into a single, coherent response in the required format. Provide your findings summary and the new investigation queue.
 """
 
 
-STRATEGIC_REVIEW_HUMAN_PROMPT = """Dr. Reed, you are in **strategic review mode**. Your purpose here is not to decide if you should stop, but to ensure the **autopsy** is proceeding in the most logical order.
-
-**Your only task in this step is to re-order the provided list of tasks.** You must not add or remove tasks; that is the responsibility of the Analyst. You are only a prioritizer.
+STRATEGIC_REVIEW_HUMAN_PROMPT = """You are in **strategic review mode**. Your purpose is to act as Chief Pathologist, actively managing the entire investigation plan to ensure a complete and efficient autopsy.
 
 - **Your Current Hypothesis:** {hypothesis}
 - **Your Latest Finding:** "{last_finding}"
-- **Current Investigation Plan (Queue) to be re-prioritized:**
+- **Current Evidence Locker:**
+```json
+{evidence}
+```
+- **Current Investigation Plan (Queue):**
 ```json
 {investigation_queue}
 ```
 
 **Your Task as Chief Pathologist:**
-1. Review the investigation_queue in light of the latest finding.
-2. Determine the optimal order. A task to analyze a newly discovered, high-value ExtractedArtifact should almost always become the #1 priority.
-3. Return the complete, re-ordered list of the exact same tasks.
+Review all available information and produce a new, clean, and optimal investigation plan.
+1. **Prune Obsolete Tasks:** Examine the current queue. You must prune the queue by removing tasks that have been made redundant or irrelevant by more recent, significant findings.
+2. **Prioritize Critical Leads:** Re-prioritize the remaining tasks. A task to analyze a newly discovered, high-value ExtractedArtifact (like decoding a hex string or script) should almost always be the #1 priority.
+3. **Generate New Strategic Tasks (If Necessary):** If the latest finding opens up a completely new avenue of investigation that is not in the queue, you can add a new high-level task.
+
+Return the updated_queue that represents the most logical and efficient path forward to complete the autopsy.
 
 """
