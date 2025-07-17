@@ -6,24 +6,48 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a LangGraph-powered forensic PDF analysis tool that combines traditional static analysis with LLM-powered threat assessment. The system implements a structured investigation workflow using GPT-4 for intelligent triage and interrogation of PDF documents.
 
+**Current Development Status**: Active development on `interrogation_node` branch with working multi-node forensic workflow.
+
 ## Key Architecture Components
 
 ### Core Workflow (LangGraph)
-- **Entry Point**: `triage_node` - Initial PDF analysis using pdfid
+- **Entry Point**: `triage_node` - Enhanced initial PDF analysis using both pdfid and pdf-parser statistical analysis
 - **Main Loop**: `interrogation_node` -> `strategic_review_node` -> conditional routing
 - **Circuit Breaker**: `MAX_INTERROGATION_STEPS = 10` to prevent infinite loops
 - **State Management**: `ForensicCaseFile` Pydantic model tracks entire investigation
+- **Finalization**: `finalize_node` generates comprehensive analysis reports
 
 ### LLM Integration Pattern
 The system uses a consistent pattern for LLM interactions:
 - **System Prompt**: Establishes "Dr. Evelyn Reed" persona with pathologist principles
 - **Structured Output**: All LLM responses use Pydantic models for type safety
 - **Chain Creation**: `create_llm_chain()` in `utils.py` standardizes prompt + model setup
+- **Vendor Agnostic**: Uses `PydanticOutputParser` for compatibility with any LLM provider
 
 ### Tool Execution Framework
 - **Tool Manifest**: `TOOL_MANIFEST` in `prompts.py` defines available PDF analysis tools
 - **Tool Executor**: `ToolExecutor` class provides safe, logged tool execution
 - **Tool Integration**: LLM selects tools dynamically based on investigation needs
+- **File Dump Support**: Enhanced with automatic file dumping and artifact cataloging
+
+## Recent Major Enhancements
+
+### Enhanced Triage Analysis
+- **Dual Analysis**: Combines both `pdfid` and `pdf-parser -a` statistical analysis for comprehensive initial assessment
+- **Combined Context**: Triage node now provides richer context to Dr. Reed for better initial hypothesis formation
+- **Improved Evidence Locker**: Initial evidence includes both pdfid and statistical analysis results
+
+### Improved Artifact Handling
+- **Artifact IDs**: Each extracted artifact gets a unique identifier for better tracking
+- **File Path Support**: Artifacts can reference both in-memory content and dumped files
+- **Evidence Cataloging**: Streamlined process for cataloging extracted content and indicators of compromise
+- **Artifact References**: Tasks can now reference specific artifacts from the evidence locker
+
+### Tool Manifest Refinements
+- **Streamlined Tools**: Focused tool set for common PDF analysis workflows
+- **Clear Descriptions**: Each tool has specific use cases and prerequisites
+- **File Dump Integration**: `dump_filtered_stream` tool with automatic confirmation messages
+- **Diagnostic Tools**: Specialized tools for handling hidden/compressed objects
 
 ## Common Development Commands
 
@@ -114,7 +138,7 @@ OPENAI_API_KEY=your_api_key_here
 ## Common Issues and Solutions
 
 ### Tool Execution Failures
-- Check tool paths in `utils.py:run_pdfid()` 
+- Check tool paths in `utils.py:run_pdfid()` and `run_pdf_parser_full_statistical_analysis()`
 - Verify Python executable paths in tool commands
 - Tool failures are logged and treated as evidence
 
@@ -127,6 +151,7 @@ OPENAI_API_KEY=your_api_key_here
 - Investigation state is preserved in `ForensicCaseFile` model
 - Use `analysis_trail` field to track investigation progress
 - Tool execution logs stored in `tool_log` field
+- Evidence artifacts cataloged in `evidence.extracted_artifacts`
 
 ## Security Considerations
 
@@ -147,10 +172,6 @@ This tool analyzes potentially malicious PDFs. Always:
 - PDF analysis tools from Didier Stevens (pdfid, pdf-parser)
 - OpenAI GPT-4 for intelligent analysis
 - Pydantic for type safety and validation
-
-# Forensic PDF Analysis Agent
-
-This project implements a multi-agent forensic analysis system for PDF documents using LangGraph and LangChain.
 
 ## Solution: Vendor-Agnostic Structured Output with PydanticOutputParser
 
@@ -197,37 +218,18 @@ def create_llm_chain(system_prompt: str, human_prompt: str, response_model: Base
     return prompt | llm | parser
 ```
 
-#### Alternative Parser Options:
-1. **PydanticOutputParser**: For complex Pydantic models with validation
-2. **StructuredOutputParser**: For simple key-value structures
-3. **JsonOutputParser**: For direct JSON parsing
-4. **RetryParser**: For automatic retry on parsing failures
-5. **OutputFixingParser**: For LLM-based output correction
+### Current Development Status
+✅ **Complete Multi-Node Workflow**: Full forensic investigation pipeline implemented
+✅ **Enhanced Triage**: Dual analysis with pdfid + pdf-parser statistics
+✅ **Artifact Management**: Comprehensive evidence locker with file dump support
+✅ **Tool Integration**: Streamlined tool manifest with specialized diagnostic capabilities
+✅ **LLM Integration**: Vendor-agnostic structured output parsing
+✅ **State Management**: Complete investigation state tracking and report generation
 
-### Usage Example:
-The same schemas work without modification:
-```python
-class ToolAndTaskSelection(BaseModel):
-    chosen_task: InvestigationTask
-    tool_name: str
-    arguments: Dict[str, Any]  # No longer requires additionalProperties=false
-    reasoning: str
+### Next Development Priorities
+- Fine-tune artifact analysis and extraction logic
+- Enhance file content analysis capabilities
+- Implement additional PDF analysis tools as needed
+- Optimize investigation queue management and task prioritization
 
-# Create chain
-chain = create_llm_chain(SYSTEM_PROMPT, TECHNICIAN_HUMAN_PROMPT, ToolAndTaskSelection)
-
-# Use exactly the same way
-result = chain.invoke({
-    "hypothesis": state.current_hypothesis,
-    "task_lookahead": json.dumps([t.model_dump() for t in task_lookahead]),
-    "tool_manifest": json.dumps(TOOL_MANIFEST)
-})
-```
-
-### Testing Results:
-✅ **Success**: The OpenAI schema error has been resolved
-✅ **Compatibility**: All existing schemas work without modification  
-✅ **Functionality**: Agent execution proceeds normally through triage and interrogation phases
-✅ **Error Handling**: Proper error messages for debugging
-
-This solution provides a robust, vendor-agnostic approach to structured output parsing that will work with any LLM provider.
+This solution provides a robust, vendor-agnostic approach to structured output parsing that works with any LLM provider and supports the complete forensic analysis workflow.

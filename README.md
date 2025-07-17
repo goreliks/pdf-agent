@@ -1,14 +1,36 @@
 # PDF Agent - Forensic PDF Analysis Tool
 
-A LangGraph-powered forensic analysis tool for PDF documents that combines traditional static analysis with LLM-powered threat assessment.
+A LangGraph-powered forensic analysis tool for PDF documents that combines traditional static analysis with LLM-powered threat assessment. 
+
+**🚀 Current Status**: Active development on `interrogation_node` branch with a complete multi-node forensic investigation workflow.
 
 ## Features
 
-- 🔍 **Static PDF Analysis**: Uses `pdfid` and custom tools to extract PDF structure
-- 🤖 **LLM-Powered Triage**: GPT-4 integration for intelligent threat assessment
-- 📊 **Forensic Workflow**: Structured investigation pipeline with evidence tracking
-- 🔗 **LangGraph Integration**: Visual workflow management and execution
-- 📝 **Comprehensive Reporting**: Detailed analysis trails and findings
+- 🔍 **Enhanced Static Analysis**: Uses both `pdfid` and `pdf-parser` for comprehensive PDF structure analysis
+- 🤖 **LLM-Powered Investigation**: GPT-4 integration with "Dr. Evelyn Reed" forensic pathologist persona
+- 📊 **Complete Forensic Workflow**: Multi-node investigation pipeline with triage → interrogation → strategic review → finalization
+- 🔗 **LangGraph Integration**: Visual workflow management and real-time execution monitoring
+- 📝 **Comprehensive Evidence Tracking**: Advanced artifact cataloging with file dump support
+- 🛡️ **Vendor-Agnostic LLM**: Compatible with any LLM provider via PydanticOutputParser
+- 📋 **Detailed Reporting**: Structured analysis trails and comprehensive findings reports
+
+## Recent Enhancements
+
+### Enhanced Triage Analysis
+- **Dual Analysis Engine**: Combines `pdfid` structure analysis with `pdf-parser` statistical analysis
+- **Richer Context**: Provides comprehensive initial assessment for better hypothesis formation
+- **Improved Evidence Collection**: Enhanced evidence locker with multiple analysis sources
+
+### Advanced Artifact Management
+- **Unique Artifact IDs**: Each extracted element gets tracked with unique identifiers
+- **File Dump Integration**: Automatic dumping and cataloging of decoded stream content
+- **Flexible References**: Artifacts can reference both in-memory content and saved files
+- **Task-Artifact Linking**: Investigation tasks can target specific artifacts from evidence locker
+
+### Streamlined Tool Framework
+- **Focused Tool Set**: Optimized collection of PDF analysis tools for common forensic workflows
+- **Diagnostic Capabilities**: Specialized tools for handling compressed/hidden objects
+- **Safe Execution**: Comprehensive error handling and logging for all tool operations
 
 ## Installation
 
@@ -23,6 +45,8 @@ A LangGraph-powered forensic analysis tool for PDF documents that combines tradi
    ```bash
    git clone <repository-url>
    cd pdf-agent
+   # Switch to the active development branch
+   git checkout interrogation_node
    ```
 
 2. **Create and activate virtual environment:**
@@ -49,7 +73,7 @@ A LangGraph-powered forensic analysis tool for PDF documents that combines tradi
 ### Command Line
 
 ```bash
-# Run analysis on a PDF file
+# Run complete forensic analysis on a PDF file
 pdf-agent
 
 # Or run directly with Python
@@ -64,17 +88,41 @@ The project includes LangGraph configuration for visual workflow management:
 langgraph dev
 ```
 
+This opens a web interface where you can:
+- Visualize the complete investigation workflow
+- Monitor real-time execution progress
+- Inspect state transitions and decision points
+- Debug investigation logic
+
 ### Programmatic Usage
 
 ```python
 from static_analysis.graph import app
 from static_analysis.schemas import ForensicCaseFileInput
 
-# Analyze a PDF
+# Analyze a PDF with complete forensic workflow
 inputs = ForensicCaseFileInput(file_path="path/to/suspicious.pdf")
+
+# Stream execution for real-time monitoring
+for event in app.stream(inputs.model_dump()):
+    for node_name, state_update in event.items():
+        print(f"--- Node '{node_name}' completed ---")
+        # Full state available in state_update
+
+# Or get final result directly
 result = app.invoke(inputs.model_dump())
 print(result)
 ```
+
+## Investigation Workflow
+
+The tool implements a complete forensic investigation pipeline:
+
+1. **Triage Node**: Enhanced dual analysis using pdfid + pdf-parser statistics
+2. **Interrogation Node**: Dynamic tool selection and execution based on LLM decisions
+3. **Strategic Review Node**: Investigation plan optimization and evidence assessment
+4. **Conditional Router**: Intelligent continuation/termination decisions
+5. **Finalize Node**: Comprehensive report generation and evidence compilation
 
 ## Project Structure
 
@@ -84,13 +132,13 @@ pdf-agent/
 │   └── static_analysis/          # Main package
 │       ├── graph.py             # LangGraph workflow definition
 │       ├── schemas.py           # Pydantic models and data structures
-│       ├── prompts.py           # LLM prompt templates
-│       ├── utils.py             # Utility functions
+│       ├── prompts.py           # LLM prompt templates and tool manifest
+│       ├── utils.py             # Utility functions and tool execution
 │       ├── test_run.py          # Testing utilities
 │       └── tools/               # Analysis tools
-│           ├── pdf-parser.py    # PDF parsing utilities
-│           └── pdfid.py         # PDF structure analysis
-├── tests/                       # Test files and data
+│           ├── pdf-parser.py    # PDF parsing utilities (Didier Stevens)
+│           └── pdfid.py         # PDF structure analysis (Didier Stevens)
+├── tests/                       # Test files and malicious PDF samples
 ├── notebooks/                   # Jupyter notebooks for development
 ├── langgraph.json              # LangGraph configuration
 ├── pyproject.toml              # Project configuration
@@ -98,6 +146,14 @@ pdf-agent/
 ```
 
 ## Development
+
+### Development Branch
+
+Active development occurs on the `interrogation_node` branch:
+- Latest features and improvements
+- Multi-node workflow implementation
+- Enhanced artifact handling
+- Comprehensive testing
 
 ### Installing Development Dependencies
 
@@ -117,7 +173,7 @@ The project uses standard Python development tools:
 ### Contributing
 
 1. Fork the repository
-2. Create a feature branch
+2. Create a feature branch from `interrogation_node`
 3. Make your changes
 4. Run tests and linting
 5. Submit a pull request
@@ -143,13 +199,22 @@ The `langgraph.json` file configures the workflow:
 }
 ```
 
-## License
+### Analysis Reports
 
-[Add your license information here]
+The tool generates comprehensive JSON reports containing:
+- Complete investigation timeline
+- Evidence locker with all artifacts
+- Tool execution logs
+- Final assessment and recommendations
 
 ## Security Notice
 
-This tool is designed for security research and forensic analysis. Always analyze suspicious PDFs in a controlled, isolated environment.
+This tool is designed for security research and forensic analysis. Always analyze suspicious PDFs in a controlled, isolated environment:
+
+- Use dedicated analysis VMs
+- Never execute extracted content
+- Treat all PDF analysis as forensic evidence collection
+- Use provided test samples for development
 
 ## Troubleshooting
 
@@ -158,9 +223,18 @@ This tool is designed for security research and forensic analysis. Always analyz
 1. **Import Errors**: Ensure you've installed the package with `pip install -e .`
 2. **OpenAI API Issues**: Verify your API key is set in the `.env` file
 3. **PDF Analysis Failures**: Check that the PDF file exists and is readable
+4. **Tool Path Issues**: Verify PDF analysis tools are present in `src/static_analysis/tools/`
 
-### Getting Help
+### Development Support
 
-- Check the [Issues](issues) page for known problems
-- Review the [Documentation](docs) for detailed usage guides
-- Join our [Discussions](discussions) for community support 
+- Check the [CLAUDE.md](CLAUDE.md) file for detailed development guidance
+- Review the [Issues](issues) page for known problems
+- Join our [Discussions](discussions) for community support
+
+## License
+
+[Add your license information here]
+
+---
+
+**Note**: This project is under active development. The `interrogation_node` branch contains the latest features and improvements. For stable releases, check the `master` branch. 
