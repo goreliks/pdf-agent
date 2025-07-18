@@ -252,15 +252,24 @@ def create_llm_chain(system_prompt: str, human_prompt: str, response_model: Base
 - **Persistence Analysis**: Detects startup folder installations and registry modifications
 
 **Investigation Efficiency:**
+
 - **Adaptive Task Management**: Dynamic queue management with strategic pruning
 - **Circuit Breaker Protection**: 10-step maximum prevents infinite loops
 - **Evidence Correlation**: Links artifacts across investigation steps
 - **Tool Selection Intelligence**: LLM chooses optimal tools for each investigation phase
 
 ### Next Development Priorities
-- Fine-tune coherence scoring algorithm based on real-world test results
-- Expand tool manifest with additional specialized PDF analysis capabilities
-- Implement batch processing for multiple file analysis
-- Add support for encrypted PDF analysis workflows
 
-This solution provides a robust, vendor-agnostic approach to structured output parsing that works with any LLM provider and supports the complete forensic analysis workflow.
+The following section outlines the strategic direction for the next major development phase. This description should be treated as a guiding framework and a starting point for our collaboration, not as a final, rigid specification. The goal is to align on the core mission and purpose, while remaining flexible on the specific implementation details as we build and learn.
+
+Introduce a Visual Deception Analyst Agent to Analyze the Rendered Appearance of PDFs. The current system excels at dissecting a PDF's internal structure but is "blind" to how a document is presented to the user. This next phase focuses on adding a visual "sense" to the system to detect a new class of threats.
+
+- Core Mission: Develop a new agent specializing in visual analysis to identify social engineering, psychological manipulation, and deception tactics that are invisible to the static analysis agent ("Dr. Reed").
+- Expert Persona: Empower this agent with a unique persona combining expertise in Human-Computer Interaction (HCI), UI/UX Security, and Cognitive Psychology to understand how visual layouts, branding, and design patterns can be used to mislead or coerce a user.
+- Analytical Workflow: Implement a "Data-Enriched Visual" workflow. The agent's primary task will be to cross-examine the rendered visual evidence (the PDF page as an image) against its underlying technical data (such as the actual destinations of hyperlinks) to spot inconsistencies and deceptive correlations.
+- Rich & Structured Feature Extraction: The agent's primary output must be a comprehensive, structured report of its findings, designed to fuel downstream analysis and the creation of a threat intelligence knowledge base. The agent should be guided to identify and categorize a wide range of visual features, including:
+      - Overall Assessment: A high-level verdict on the document's visual trustworthiness (e.g., Benign, Suspicious, Deceptive) and a confidence score.
+      - Brand & Authority Analysis: Identification of any impersonated brands or claims of authority, supported by evidence from the visual-technical cross-examination.
+      - Psychological Tactics: Categorization of observed deception techniques (e.g., creating false urgency, social proof, scarcity).
+      - Benign Signals: Recognition of legitimate design patterns and trust signals to help reduce false positives.
+      - Detailed Findings: A specific list of observations that connect visual elements (like a button or logo) to their underlying technical data and a description of why the element is noteworthy.
