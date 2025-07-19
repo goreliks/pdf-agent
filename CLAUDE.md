@@ -6,18 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a **comprehensive PDF analysis platform** powered by LangGraph that combines parallel data extraction, forensic investigation, and visual threat assessment. The platform has evolved from a single-purpose forensic tool into a composed multi-graph system with specialized analysis workflows.
 
-**🔥 Current Development Status**: ✅ **Major Architecture Enhancement** - Complete composed graph system with parallel processing capabilities on `preprocessing_connections` branch.
+**🔥 Current Development Status**: ✅ **Major Architecture Enhancement** - Complete composed graph system with parallel processing capabilities and centralized LLM configuration on `configuration` branch.
 
 ## Recent Major Architecture Evolution
 
-### 🏗️ **New Composed Graph Architecture (preprocessing_connections branch)**
+### 🏗️ **New Composed Graph Architecture (configuration branch)**
 
 **Latest Commits (Jul 19, 2025):**
+- `100b632` - "Merge pull request #6" - Integration of centralized LLM configuration system
 - `767517c` - "fixed output schemas full output" - Final schema validation and output formatting
 - `429625a` - "updated working schemas" - Enhanced Pydantic schemas across all modules
 - `86617b5` - "working version of url and image extraction graph" - Parallel processing implementation
 
-The platform now consists of **three specialized LangGraph applications**:
+The platform now consists of **three specialized LangGraph applications** with **centralized LLM configuration**:
 
 1. **📊 PDF Hunter Main Graph** (`src/pdf_hunter_main/`) - Master orchestrator using subgraph composition
 2. **⚡ PDF Processing Graph** (`src/pdf_processing/`) - Parallel data extraction engine  
@@ -40,6 +41,55 @@ The platform now consists of **three specialized LangGraph applications**:
 This enables **three distinct workflows** in LangGraph Studio with clean input/output interfaces.
 
 ## Key Architecture Components
+
+### 🆕 **Centralized LLM Configuration System**
+
+**File**: `src/config.py`
+
+The platform now features a **centralized configuration system** that provides flexible LLM provider management:
+
+#### **Multi-Provider Support**
+```python
+# Currently Supported Providers (with examples)
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic  
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
+from langchain_huggingface import ChatHuggingFace
+
+# OpenAI (Default - Active)
+openai_4o = ChatOpenAI(model="gpt-4o", temperature=0)
+openai_o3_mini = ChatOpenAI(model="o3-mini", temperature=0)
+
+# Other providers (Commented - Ready for activation)
+# anthropic_claude_3_5_sonnet = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0)
+# google_gemini_1_5_flash = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+# ollama_llama3_8b = ChatOllama(model="llama3.8b", temperature=0)
+```
+
+#### **Role-Based Model Assignment**
+```python
+# Static Analysis Workflow - Specialized roles
+STATIC_ANALYSIS_ANALYST_LLM = openai_4o        # Deep technical analysis
+STATIC_ANALYSIS_TRIAGE_LLM = openai_4o         # Initial threat assessment  
+STATIC_ANALYSIS_TECHNICIAN_LLM = openai_4o     # Tool selection & execution
+STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_4o  # High-level investigation review
+
+# Visual Analysis Workflow - Future expansion
+VISUAL_ANALYSIS_ANALYST_LLM = openai_4o        # Visual deception detection
+```
+
+#### **Easy Provider Switching**
+To change providers across the entire platform:
+1. Uncomment desired provider initialization
+2. Update role assignments to use new models
+3. Restart application - all graphs automatically use new configuration
+
+**Benefits:**
+- **Single Configuration Point**: Change LLM providers for entire platform in one file
+- **Role Specialization**: Different models can be optimized for different analysis tasks
+- **Development Flexibility**: Quick A/B testing of providers for performance comparison
+- **Cost Optimization**: Use cheaper models for simple tasks, premium models for complex analysis
 
 ### 🆕 **Master Orchestrator (PDF Hunter Main)**
 
@@ -100,11 +150,14 @@ START → validation → [image_extraction, url_extraction] → aggregation → 
 
 ### 🛡️ **LLM Integration Pattern**
 
-**Vendor-Agnostic Implementation:**
-All graphs use consistent LLM integration via `PydanticOutputParser`:
+**Centralized Configuration with Vendor-Agnostic Implementation:**
+All graphs now use the centralized configuration system from `src/config.py` combined with consistent LLM integration via `PydanticOutputParser`:
 
 ```python
-def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel):
+# Import centralized configuration
+from config import STATIC_ANALYSIS_ANALYST_LLM, STATIC_ANALYSIS_TRIAGE_LLM
+
+def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel, llm):
     """Helper function to create a structured LLM chain using PydanticOutputParser."""
     
     parser = PydanticOutputParser(pydantic_object=response_model)
@@ -116,16 +169,22 @@ def create_llm_chain(system_prompt: str, human_prompt: str, response_model: Base
     ])
     
     prompt = prompt.partial(format_instructions=parser.get_format_instructions())
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    # llm parameter now comes from centralized config
     
     return prompt | llm | parser
+
+# Usage in graph nodes
+chain = create_llm_chain(SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TriageAnalysis, STATIC_ANALYSIS_TRIAGE_LLM)
 ```
 
 **Benefits:**
-- **Vendor Agnostic**: Works with any LLM provider
-- **No Schema Restrictions**: No OpenAI-specific validation requirements
-- **Consistent Interface**: Same API across all providers
+- **Centralized Configuration**: Single point of control for all LLM providers
+- **Role-Based Assignment**: Different models for different analysis roles  
+- **Vendor Agnostic**: Works with any LLM provider (OpenAI, Anthropic, Google, Ollama, etc.)
+- **No Schema Restrictions**: No provider-specific validation requirements
+- **Consistent Interface**: Same API across all providers and roles
 - **Better Error Handling**: Clear parsing failure messages
+- **Development Flexibility**: Easy A/B testing of different models for different roles
 
 ## Recent Performance Metrics
 
@@ -223,6 +282,7 @@ pytest tests/
 - `prompts.py` - Visual analysis prompts and persona definitions *(Work in Progress)*
 
 ### 📋 **Configuration Files**
+- `src/config.py` - **🆕 Centralized LLM configuration** with multi-provider support and role assignments
 - `langgraph.json` - **🆕 Multi-graph configuration** with three specialized workflows
 - `pyproject.toml` - Python package configuration with dependencies
 - `.env` - Environment variables (OpenAI API key required)
@@ -323,12 +383,13 @@ This platform analyzes potentially malicious PDFs. Always:
 
 ## Current Development Priorities
 
-### ✅ **Completed (preprocessing_connections branch)**
-1. **Composed Graph Architecture**: Master orchestrator with subgraph integration
-2. **Parallel Processing Engine**: Simultaneous data extraction operations
-3. **Schema-First Design**: Full Pydantic validation across all workflows
-4. **Multi-Graph LangGraph Configuration**: Three specialized workflows
-5. **Type Safety**: Comprehensive error handling and validation
+### ✅ **Completed (configuration branch)**
+1. **Centralized LLM Configuration**: Multi-provider support with role-based model assignment
+2. **Composed Graph Architecture**: Master orchestrator with subgraph integration
+3. **Parallel Processing Engine**: Simultaneous data extraction operations
+4. **Schema-First Design**: Full Pydantic validation across all workflows
+5. **Multi-Graph LangGraph Configuration**: Three specialized workflows
+6. **Type Safety**: Comprehensive error handling and validation
 
 ### 🎯 **Next Phase: Visual Analysis Integration**
 
@@ -353,15 +414,20 @@ This platform analyzes potentially malicious PDFs. Always:
 
 ## Branch Strategy
 
-### 🚀 **Current Active: preprocessing_connections**
-- **Status**: Major architecture enhancement with production-ready features
-- **Features**: Composed graphs, parallel processing, full schema validation
-- **Use For**: New development and production deployments
+### 🚀 **Current Active: configuration**
+- **Status**: Latest enhancement with centralized LLM configuration system  
+- **Features**: Complete composed graphs, parallel processing, multi-provider LLM support, full schema validation
+- **Use For**: All new development and production deployments
 
-### 🏆 **Stable Reference: interrogation_node**  
+### 🏆 **Stable Reference: preprocessing_connections**
+- **Status**: Major architecture enhancement with production-ready features
+- **Features**: Composed graphs, parallel processing, full schema validation (without centralized config)
+- **Use For**: Fallback reference for composed graph architecture
+
+### 🔍 **Legacy Stable: interrogation_node**  
 - **Status**: Production-ready single-graph forensic analysis
 - **Features**: Complete investigation workflow with proven malware detection
-- **Use For**: Reference implementation and fallback
+- **Use For**: Reference implementation for forensic analysis patterns
 
 ### 🎨 **Experimental: visual_agent**
 - **Status**: Early development of visual analysis components
@@ -371,6 +437,7 @@ This platform analyzes potentially malicious PDFs. Always:
 ### Current Development Status Summary
 
 **Architecture Evolution Complete**: ✅
+- Centralized LLM configuration with multi-provider support
 - Composed graph system with subgraph integration
 - Parallel processing engine with type safety
 - Multi-graph LangGraph Studio configuration
@@ -379,10 +446,11 @@ This platform analyzes potentially malicious PDFs. Always:
 **Production Capabilities**: ✅
 - Complete PDF data extraction (images, URLs, hashes)
 - Proven forensic malware detection workflow
-- Vendor-agnostic LLM integration
+- Multi-provider LLM integration with role-based assignment
 - Comprehensive error handling and validation
 
 **Ready for Visual Analysis Integration**: ✅
 - Extensible architecture for additional subgraphs
 - Established patterns for cross-modal analysis
 - Type-safe interfaces for new analysis components
+- Centralized configuration ready for visual analysis roles

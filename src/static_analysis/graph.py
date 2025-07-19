@@ -15,6 +15,9 @@ from static_analysis.prompts import (
 )
 from static_analysis.utils import create_llm_chain, run_pdfid, run_pdf_parser_full_statistical_analysis, ToolExecutor
 
+from config import STATIC_ANALYSIS_ANALYST_LLM, STATIC_ANALYSIS_TRIAGE_LLM, STATIC_ANALYSIS_TECHNICIAN_LLM, STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM
+
+
 
 # --- TOOL EXECUTOR INSTANTIATED ---
 # Create a single, reusable instance of our tool executor
@@ -35,7 +38,7 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
     stats_output = run_pdf_parser_full_statistical_analysis(state.file_path)
     triage_context = f"--- PDFID ANALYSIS ---\n{pdfid_output}\n\n--- STATISTICAL ANALYSIS ---\n{stats_output}"
     print(f"[*] Combined Triage Output:\n{triage_context}")
-    chain = create_llm_chain(SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TriageAnalysis)
+    chain = create_llm_chain(SYSTEM_PROMPT, TRIAGE_HUMAN_PROMPT, TriageAnalysis, STATIC_ANALYSIS_TRIAGE_LLM)
 
     print("[*] Dr. Reed is performing initial triage...")
     llm_response = chain.invoke({"triage_context": triage_context})
@@ -77,7 +80,7 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
     task_lookahead = state.investigation_queue[:5]
     
     print("[*] Dr. Reed is in instrumental mode (selecting task and tool)...")
-    technician_chain = create_llm_chain(SYSTEM_PROMPT, TECHNICIAN_HUMAN_PROMPT, ToolAndTaskSelection)
+    technician_chain = create_llm_chain(SYSTEM_PROMPT, TECHNICIAN_HUMAN_PROMPT, ToolAndTaskSelection, STATIC_ANALYSIS_TECHNICIAN_LLM)
     
     # This invoke call is now correct and includes the evidence_locker
     tool_selection = technician_chain.invoke({
@@ -97,7 +100,7 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
     print(f"[*] Tool Output:\nSTDOUT: {tool_log_entry.stdout}\nSTDERR: {tool_log_entry.stderr}")
 
     print("[*] Dr. Reed is in analytical mode (interpreting tool output)...")
-    analyst_chain = create_llm_chain(SYSTEM_PROMPT, ANALYST_HUMAN_PROMPT, InterrogationAnalysis)
+    analyst_chain = create_llm_chain(SYSTEM_PROMPT, ANALYST_HUMAN_PROMPT, InterrogationAnalysis, STATIC_ANALYSIS_ANALYST_LLM)
     
     analysis = analyst_chain.invoke({
         "hypothesis": state.current_hypothesis,
@@ -156,7 +159,7 @@ def strategic_review_node(state: ForensicCaseFile) -> Dict[str, Any]:
         return {}
 
     print("[*] Dr. Reed is reviewing the overall strategy...")
-    review_chain = create_llm_chain(SYSTEM_PROMPT, STRATEGIC_REVIEW_HUMAN_PROMPT, StrategicReview)
+    review_chain = create_llm_chain(SYSTEM_PROMPT, STRATEGIC_REVIEW_HUMAN_PROMPT, StrategicReview, STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM)
     
     review = review_chain.invoke({
         "hypothesis": state.current_hypothesis,
