@@ -59,6 +59,7 @@ from .agent_schemas import (
 
 from .pdf_agent import (
     process_pdf_with_agent,
+    process_pdf_with_agent_legacy,
     create_pdf_processing_graph,
 )
 
@@ -96,6 +97,7 @@ __all__ = [
     
     # PDF Agent
     "process_pdf_with_agent",
+    "process_pdf_with_agent_legacy",
     "create_pdf_processing_graph",
     
     # Utility functions

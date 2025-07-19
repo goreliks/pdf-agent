@@ -4,13 +4,132 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a LangGraph-powered forensic PDF analysis tool that combines traditional static analysis with LLM-powered threat assessment. The system implements a structured investigation workflow using GPT-4 for intelligent triage and interrogation of PDF documents.
+This is a **comprehensive PDF analysis platform** powered by LangGraph that combines parallel data extraction, forensic investigation, and visual threat assessment. The platform has evolved from a single-purpose forensic tool into a composed multi-graph system with specialized analysis workflows.
 
-**Current Development Status**: ✅ **Production Ready** - Complete multi-node forensic workflow with proven malware detection capabilities on `interrogation_node` branch.
+**🔥 Current Development Status**: ✅ **Major Architecture Enhancement** - Complete composed graph system with parallel processing capabilities on `preprocessing_connections` branch.
+
+## Recent Major Architecture Evolution
+
+### 🏗️ **New Composed Graph Architecture (preprocessing_connections branch)**
+
+**Latest Commits (Jul 19, 2025):**
+- `767517c` - "fixed output schemas full output" - Final schema validation and output formatting
+- `429625a` - "updated working schemas" - Enhanced Pydantic schemas across all modules
+- `86617b5` - "working version of url and image extraction graph" - Parallel processing implementation
+
+The platform now consists of **three specialized LangGraph applications**:
+
+1. **📊 PDF Hunter Main Graph** (`src/pdf_hunter_main/`) - Master orchestrator using subgraph composition
+2. **⚡ PDF Processing Graph** (`src/pdf_processing/`) - Parallel data extraction engine  
+3. **🔍 Static Analysis Graph** (`src/static_analysis/`) - Forensic investigation workflow
+4. **👁️ Visual Analysis Components** (`src/visual_analysis/`) - *In Development* - Visual deception detection
+
+### 🎯 **LangGraph Configuration Evolution**
+
+**New `langgraph.json` (Multi-Graph Setup):**
+```json
+{
+  "graphs": {
+    "pdf_hunter": "./src/pdf_hunter_main/pdf_hunter_graph.py:app",     // Master composer
+    "pdf_processing": "./src/pdf_processing/pdf_agent.py:app",         // Data extraction  
+    "agent": "./src/static_analysis/graph.py:app"                      // Forensic analysis
+  }
+}
+```
+
+This enables **three distinct workflows** in LangGraph Studio with clean input/output interfaces.
+
+## Key Architecture Components
+
+### 🆕 **Master Orchestrator (PDF Hunter Main)**
+
+**File**: `src/pdf_hunter_main/pdf_hunter_graph.py`
+
+Implements LangGraph's **"Different State Schemas"** pattern for subgraph composition:
+
+```
+START 
+  ↓
+pdf_processing_node (invokes PDF processing subgraph)
+  ↓
+static_analysis_node (invokes static analysis subgraph)  
+  ↓
+final_aggregation_node (combines results)
+  ↓
+END
+```
+
+**Schema Architecture:**
+- **`PDFHunterInput`**: User-facing interface (pdf_path, pages_to_process, output_directory)
+- **`PDFHunterState`**: Internal state management between subgraphs
+- **`PDFHunterOutput`**: Comprehensive results from all analysis stages
+
+### ⚡ **Parallel Processing Engine (PDF Processing)**
+
+**File**: `src/pdf_processing/pdf_agent.py`
+
+Implements **validation-first then parallel processing** pattern:
+
+```
+START → validation → [image_extraction, url_extraction] → aggregation → END
+```
+
+**Key Features:**
+- **Schema-First Design**: Full Pydantic validation for type safety
+- **Parallel Node Execution**: Image extraction, URL extraction, and hashing run simultaneously
+- **LangGraph Studio Ready**: Clean interface showing only user-facing input fields
+- **Error Resilience**: Graceful degradation with partial results
+
+**Schemas:**
+- **`PDFProcessingInput`**: Validates all input parameters with field validators
+- **`PDFProcessingOutput`**: Type-safe output structure  
+- **`PDFProcessingState`**: Internal TypedDict for LangGraph state management
+
+### 🔍 **Forensic Investigation Workflow (Static Analysis)**
+
+**File**: `src/static_analysis/graph.py`
+
+**Production-Ready Status**: ✅ Complete forensic workflow with proven malware detection capabilities.
+
+**Core Workflow (LangGraph):**
+- **Entry Point**: `triage_node` - Enhanced initial PDF analysis using both pdfid and pdf-parser
+- **Main Loop**: `interrogation_node` -> `strategic_review_node` -> conditional routing
+- **Circuit Breaker**: `MAX_INTERROGATION_STEPS = 10` to prevent infinite loops
+- **State Management**: `ForensicCaseFile` Pydantic model tracks entire investigation
+- **Finalization**: `finalize_node` generates comprehensive analysis reports
+
+### 🛡️ **LLM Integration Pattern**
+
+**Vendor-Agnostic Implementation:**
+All graphs use consistent LLM integration via `PydanticOutputParser`:
+
+```python
+def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel):
+    """Helper function to create a structured LLM chain using PydanticOutputParser."""
+    
+    parser = PydanticOutputParser(pydantic_object=response_model)
+    enhanced_human_prompt = human_prompt + "\n\n{format_instructions}"
+    
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessagePromptTemplate.from_template(system_prompt),
+        HumanMessagePromptTemplate.from_template(enhanced_human_prompt)
+    ])
+    
+    prompt = prompt.partial(format_instructions=parser.get_format_instructions())
+    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    
+    return prompt | llm | parser
+```
+
+**Benefits:**
+- **Vendor Agnostic**: Works with any LLM provider
+- **No Schema Restrictions**: No OpenAI-specific validation requirements
+- **Consistent Interface**: Same API across all providers
+- **Better Error Handling**: Clear parsing failure messages
 
 ## Recent Performance Metrics
 
-**Real-World Malware Detection Success:**
+### 🏆 **Real-World Malware Detection Success (Static Analysis)**
 - ✅ Successfully analyzed malicious PDF with /Launch action attack vector
 - ✅ Completed full investigation in **8 interrogation steps** (well under 10-step limit)
 - ✅ **100% attack chain mapping** - traced OpenAction → Launch → PowerShell → malware download
@@ -18,58 +137,17 @@ This is a LangGraph-powered forensic PDF analysis tool that combines traditional
 - ✅ **IoC identification** - extracted malicious URL and persistence mechanisms
 - ✅ **Perfect autonomy detection** - identified /OpenAction and /AcroForm deception patterns
 
-**Evidence Collection Efficiency:**
-- Extracted 1 complete artifact with decoded PowerShell payload
-- Identified 3 indicators of compromise including malicious URL
-- Documented 9 attack chain links showing complete infection pathway
-- Generated comprehensive 238-line forensic report with tool execution logs
-
-## Key Architecture Components
-
-### Core Workflow (LangGraph)
-- **Entry Point**: `triage_node` - Enhanced initial PDF analysis using both pdfid and pdf-parser statistical analysis
-- **Main Loop**: `interrogation_node` -> `strategic_review_node` -> conditional routing
-- **Circuit Breaker**: `MAX_INTERROGATION_STEPS = 10` to prevent infinite loops
-- **State Management**: `ForensicCaseFile` Pydantic model tracks entire investigation
-- **Finalization**: `finalize_node` generates comprehensive analysis reports
-
-### LLM Integration Pattern
-The system uses a consistent pattern for LLM interactions:
-- **System Prompt**: Establishes "Dr. Evelyn Reed" persona with pathologist principles
-- **Structured Output**: All LLM responses use Pydantic models for type safety
-- **Chain Creation**: `create_llm_chain()` in `utils.py` standardizes prompt + model setup
-- **Vendor Agnostic**: Uses `PydanticOutputParser` for compatibility with any LLM provider
-
-### Tool Execution Framework
-- **Tool Manifest**: `TOOL_MANIFEST` in `prompts.py` defines available PDF analysis tools
-- **Tool Executor**: `ToolExecutor` class provides safe, logged tool execution
-- **Tool Integration**: LLM selects tools dynamically based on investigation needs
-- **File Dump Support**: Enhanced with automatic file dumping and artifact cataloging
-
-## Recent Major Enhancements
-
-### Enhanced Triage Analysis
-- **Dual Analysis**: Combines both `pdfid` and `pdf-parser -a` statistical analysis for comprehensive initial assessment
-- **Combined Context**: Triage node now provides richer context to Dr. Reed for better initial hypothesis formation
-- **Improved Evidence Locker**: Initial evidence includes both pdfid and statistical analysis results
-
-### Improved Artifact Handling
-- **Artifact IDs**: Each extracted artifact gets a unique identifier for better tracking
-- **File Path Support**: Artifacts can reference both in-memory content and dumped files
-- **Evidence Cataloging**: Streamlined process for cataloging extracted content and indicators of compromise
-- **Artifact References**: Tasks can now reference specific artifacts from the evidence locker
-
-### Tool Manifest Refinements
-- **Streamlined Tools**: Focused tool set for common PDF analysis workflows
-- **Clear Descriptions**: Each tool has specific use cases and prerequisites
-- **File Dump Integration**: `dump_filtered_stream` tool with automatic confirmation messages
-- **Diagnostic Tools**: Specialized tools for handling hidden/compressed objects
+### ⚡ **Processing Efficiency (Data Extraction)**
+- **Parallel Processing**: Image extraction, URL extraction, and hashing run simultaneously
+- **Type Safety**: Zero runtime errors through comprehensive Pydantic validation  
+- **Memory Efficiency**: Processes large PDFs with optimized resource usage
+- **Error Resilience**: Graceful degradation with partial results on component failures
 
 ## Common Development Commands
 
 ### Installation and Setup
 ```bash
-# Install in development mode
+# Install in development mode with current architecture
 pip install -e .
 
 # Install development dependencies
@@ -80,14 +158,28 @@ pip install -r requirements.txt
 ```
 
 ### Running the Application
+
+#### 🎯 **Master Orchestrator (Recommended)**
 ```bash
-# Command line entry point
-pdf-agent
+# Complete analysis pipeline
+python -c "from pdf_hunter_main import process_pdf_with_hunter, PDFHunterInput; print('Ready for comprehensive analysis')"
+```
 
-# Direct module execution
+#### ⚡ **Data Extraction Only**
+```bash
+# Fast parallel processing
+python -c "from pdf_processing import process_pdf_with_agent, PDFProcessingInput; print('Ready for data extraction')"
+```
+
+#### 🔍 **Forensic Analysis Only**
+```bash  
+# Deep security analysis
 python -m static_analysis.graph
+```
 
-# LangGraph development server
+#### 🎨 **LangGraph Studio (All Graphs)**
+```bash
+# Launch with multi-graph support
 langgraph dev
 ```
 
@@ -104,172 +196,193 @@ pytest tests/
 
 ## File Structure and Key Components
 
-### Core Module (`src/static_analysis/`)
+### 🆕 **Master Orchestrator (`src/pdf_hunter_main/`)**
+- `pdf_hunter_graph.py` - Composed workflow definition with subgraph integration
+- `schemas.py` - Input/output schemas for user-facing interface
+- `README.md` - Architecture documentation and usage examples
+
+### ⚡ **Parallel Processing (`src/pdf_processing/`)**
+- `pdf_agent.py` - LangGraph processing workflow with parallel nodes
+- `agent_schemas.py` - Comprehensive Pydantic schemas for validation
+- `image_extraction.py` - Base64 encoding, perceptual hashing, SHA1-based saving
+- `url_extraction.py` - URL extraction from annotations and text content
+- `hashing.py` - SHA1 and MD5 hash calculation utilities
+- `example_agent_usage.py` - Usage examples and integration patterns
+- `test_schema_validation.py` - Schema validation testing
+- `README.md` - Processing documentation
+
+### 🔍 **Forensic Investigation (`src/static_analysis/`)**
 - `graph.py` - Main LangGraph workflow definition and node implementations
 - `schemas.py` - Pydantic models for state management and LLM interactions
 - `prompts.py` - LLM prompts, tool manifest, and Dr. Reed persona
 - `utils.py` - LLM chain creation, tool execution, and helper functions
 - `test_run.py` - Testing utilities and workflow validation
+- `tools/` - PDF analysis tools (pdfid.py, pdf-parser.py)
 
-### Analysis Tools (`src/static_analysis/tools/`)
-- `pdfid.py` - PDF structure analysis tool (Didier Stevens)
-- `pdf-parser.py` - PDF parsing and object extraction tool (Didier Stevens)
+### 👁️ **Visual Analysis (`src/visual_analysis/`)**
+- `prompts.py` - Visual analysis prompts and persona definitions *(Work in Progress)*
 
-### Configuration Files
-- `langgraph.json` - LangGraph configuration pointing to main graph
+### 📋 **Configuration Files**
+- `langgraph.json` - **🆕 Multi-graph configuration** with three specialized workflows
 - `pyproject.toml` - Python package configuration with dependencies
 - `.env` - Environment variables (OpenAI API key required)
 
 ## Development Workflow Patterns
 
-### Adding New Analysis Tools
-1. Add tool definition to `TOOL_MANIFEST` in `prompts.py`
-2. Implement tool function in `utils.py` or as external script
-3. Test tool execution through `ToolExecutor`
-4. Update LLM prompts to reference new tool capabilities
+### Adding New Analysis Components
+1. **Schema-First Design**: Define Pydantic schemas for inputs/outputs/state
+2. **Node Implementation**: Create processing nodes with error handling
+3. **Graph Integration**: Add to appropriate graph or create new subgraph
+4. **Validation**: Add comprehensive type checking and validation
+5. **Documentation**: Update module README with usage examples
 
 ### Modifying Investigation Logic
-1. Core investigation flow is in `graph.py` node functions
-2. State transitions controlled by `conditional_router`
-3. LLM decision-making prompts in `prompts.py`
-4. State structure defined in `schemas.py`
+1. **Subgraph Selection**: Choose appropriate graph (hunter/processing/static)
+2. **State Management**: Update relevant Pydantic schemas
+3. **Node Updates**: Modify node functions with proper type annotations
+4. **Testing**: Validate with schema validation tests
+5. **Integration**: Test subgraph composition if using hunter main
 
-### LLM Prompt Engineering
-- All prompts use "Dr. Evelyn Reed" persona with pathologist principles
-- Structured output ensures type safety and consistent parsing
-- Tool selection prompts include manifest and task context
-- Analysis prompts include hypothesis and evidence context
+### Subgraph Composition Patterns
+1. **Different State Schemas**: Each subgraph maintains independent state
+2. **Transform Functions**: Convert between subgraph input/output formats
+3. **Error Isolation**: Subgraph failures don't affect other components
+4. **Type Safety**: Full Pydantic validation at all interfaces
 
 ## Environment Setup
 
 ### Required Environment Variables
 ```bash
-OPENAI_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_api_key_here              # Required for LLM analysis
 ```
 
 ### Optional Configuration
-- `PDFPARSER_OPTIONS` - Global options for PDF parser tool
-- Custom tool paths can be configured in `utils.py`
+```bash
+PDFPARSER_OPTIONS=--verbose                   # Global options for PDF parser tools
+```
 
 ## Common Issues and Solutions
 
-### Tool Execution Failures
-- Check tool paths in `utils.py:run_pdfid()` and `run_pdf_parser_full_statistical_analysis()`
-- Verify Python executable paths in tool commands
-- Tool failures are logged and treated as evidence
+### Architecture-Specific Issues
 
-### LLM API Issues
-- Verify OpenAI API key in `.env` file
-- Check rate limits and API quotas
-- LLM errors are captured in investigation state
+#### Subgraph Import Errors
+```python
+# Ensure proper module installation
+pip install -e .
 
-### State Management
-- Investigation state is preserved in `ForensicCaseFile` model
-- Use `analysis_trail` field to track investigation progress
-- Tool execution logs stored in `tool_log` field
-- Evidence artifacts cataloged in `evidence.extracted_artifacts`
+# Check import paths for subgraphs
+from pdf_processing.pdf_agent import app as pdf_processing_app
+from static_analysis.graph import app as static_analysis_app
+```
 
-## Security Considerations
+#### Schema Validation Failures
+```python
+# Use proper Pydantic input models
+from pdf_hunter_main.schemas import PDFHunterInput
+from pdf_processing.agent_schemas import PDFProcessingInput
+from static_analysis.schemas import ForensicCaseFileInput
 
-This tool analyzes potentially malicious PDFs. Always:
-- Run in isolated/sandboxed environment
-- Never execute extracted content
-- Treat all PDF analysis as forensic evidence collection
-- Use test samples from `tests/` directory for development
+# Validate before processing
+try:
+    input_data = PDFHunterInput(pdf_path="test.pdf")
+except ValidationError as e:
+    print(f"Validation error: {e}")
+```
+
+#### LangGraph Studio Graph Selection
+- **pdf_hunter**: Complete analysis pipeline (recommended)
+- **pdf_processing**: Data extraction only
+- **agent**: Forensic analysis only
+
+### Legacy Compatibility
+- **Old static analysis**: Still available via `static_analysis.graph:app`
+- **Direct PDF processing**: Available via `pdf_processing.pdf_agent:app`  
+- **Migration path**: Use `pdf_hunter_main` for new implementations
 
 ## Integration Points
 
 ### LangGraph Studio
-- Visual workflow editing available via `langgraph dev`
-- Real-time state inspection during investigation
-- Workflow debugging and step-through capabilities
+- **Multi-Graph Support**: Three specialized workflows in single interface
+- **Clean Input Interfaces**: Only user-facing fields shown for each graph
+- **Visual Workflow Management**: Real-time state inspection and debugging
+- **Subgraph Visualization**: See composed workflow interactions
 
 ### External Tools
-- PDF analysis tools from Didier Stevens (pdfid, pdf-parser)
-- OpenAI GPT-4 for intelligent analysis
-- Pydantic for type safety and validation
+- **PDF Analysis Tools**: Didier Stevens tools (pdfid, pdf-parser)
+- **OpenAI GPT-4**: Intelligent analysis via vendor-agnostic interface
+- **Pydantic**: Comprehensive type safety and validation
+- **LangGraph**: Advanced workflow orchestration and composition
 
-## Solution: Vendor-Agnostic Structured Output with PydanticOutputParser
+## Security Considerations
 
-### Problem Solved
-The original implementation used OpenAI's `with_structured_output` which caused schema validation errors:
-```
-Invalid schema for response_format 'ToolAndTaskSelection': In context=('properties', 'arguments'), 'additionalProperties' is required to be supplied and to be false.
-```
+This platform analyzes potentially malicious PDFs. Always:
+- **Isolated Environment**: Run in sandboxed/VM environment
+- **Never Execute**: Don't execute extracted content
+- **Forensic Evidence**: Treat all analysis as evidence collection
+- **Test Samples**: Use files from `tests/` directory for development
 
-### Vendor-Agnostic Solution
-We replaced `with_structured_output` with `PydanticOutputParser` for vendor-agnostic structured output parsing:
+## Current Development Priorities
 
-#### Key Benefits:
-1. **Vendor Agnostic**: Works with any LLM provider (OpenAI, Anthropic, Cohere, local models, etc.)
-2. **No Schema Restrictions**: No OpenAI-specific schema validation requirements
-3. **Consistent Interface**: Same API across all LLM providers
-4. **Better Error Handling**: Clear error messages for parsing failures
-5. **Future-Proof**: Not tied to any specific provider's structured output implementation
+### ✅ **Completed (preprocessing_connections branch)**
+1. **Composed Graph Architecture**: Master orchestrator with subgraph integration
+2. **Parallel Processing Engine**: Simultaneous data extraction operations
+3. **Schema-First Design**: Full Pydantic validation across all workflows
+4. **Multi-Graph LangGraph Configuration**: Three specialized workflows
+5. **Type Safety**: Comprehensive error handling and validation
 
-#### Implementation Details:
-```python
-def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel):
-    """Helper function to create a structured LLM chain using PydanticOutputParser."""
-    
-    # Create the parser
-    parser = PydanticOutputParser(pydantic_object=response_model)
-    
-    # Add format instructions to the human prompt
-    enhanced_human_prompt = human_prompt + "\n\n{format_instructions}"
-    
-    # Create the prompt template
-    prompt = ChatPromptTemplate.from_messages([
-        SystemMessagePromptTemplate.from_template(system_prompt),
-        HumanMessagePromptTemplate.from_template(enhanced_human_prompt)
-    ])
-    
-    # Partially fill the format instructions
-    prompt = prompt.partial(format_instructions=parser.get_format_instructions())
-    
-    # Create LLM
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
-    
-    # Create chain: prompt -> llm -> parser
-    return prompt | llm | parser
-```
+### 🎯 **Next Phase: Visual Analysis Integration**
 
-### Current Development Status
-✅ **Complete Multi-Node Workflow**: Full forensic investigation pipeline implemented and tested
-✅ **Enhanced Triage**: Dual analysis with pdfid + pdf-parser statistics proving effective
-✅ **Artifact Management**: Comprehensive evidence locker with successful file dump support
-✅ **Tool Integration**: Streamlined tool manifest with successful diagnostic capabilities
-✅ **LLM Integration**: Vendor-agnostic structured output parsing working flawlessly
-✅ **State Management**: Complete investigation state tracking and report generation
-✅ **Real-World Validation**: Successfully detected and analyzed actual malware samples
+**Goal**: Introduce Visual Deception Analyst Agent for rendered PDF appearance analysis.
 
-### Proven Capabilities
-**Malware Detection Excellence:**
-- **Attack Vector Recognition**: Successfully identifies /Launch, /OpenAction, and /AcroForm patterns
-- **Payload Extraction**: Automatic hex decoding and PowerShell command analysis
-- **Deception Detection**: Identifies object stream obfuscation and hidden content
-- **IoC Extraction**: Automatic identification of malicious URLs, file paths, and commands
-- **Persistence Analysis**: Detects startup folder installations and registry modifications
+**Key Components:**
+- **Visual Analysis Expert Persona**: HCI/UX Security and Cognitive Psychology expertise
+- **Cross-Modal Analysis**: Compare visual appearance vs. technical reality  
+- **Psychological Tactics Detection**: Identify social engineering patterns
+- **Structured Feature Extraction**: Comprehensive visual analysis reports
 
-**Investigation Efficiency:**
+**Integration Pattern:**
+- Add as fourth subgraph to PDF Hunter Main composition
+- Maintain schema-first design with visual analysis input/output models
+- Preserve parallel processing capabilities where possible
 
-- **Adaptive Task Management**: Dynamic queue management with strategic pruning
-- **Circuit Breaker Protection**: 10-step maximum prevents infinite loops
-- **Evidence Correlation**: Links artifacts across investigation steps
-- **Tool Selection Intelligence**: LLM chooses optimal tools for each investigation phase
+### 🔄 **Platform Enhancements**
+1. **Parallel Subgraph Execution**: Run extraction and analysis simultaneously when independent
+2. **Result Caching**: Implement hash-based caching for identical files
+3. **Batch Processing**: Multi-file analysis workflows
+4. **Custom Pipelines**: User-configurable workflow composition
 
-### Next Development Priorities
+## Branch Strategy
 
-The following section outlines the strategic direction for the next major development phase. This description should be treated as a guiding framework and a starting point for our collaboration, not as a final, rigid specification. The goal is to align on the core mission and purpose, while remaining flexible on the specific implementation details as we build and learn.
+### 🚀 **Current Active: preprocessing_connections**
+- **Status**: Major architecture enhancement with production-ready features
+- **Features**: Composed graphs, parallel processing, full schema validation
+- **Use For**: New development and production deployments
 
-Introduce a Visual Deception Analyst Agent to Analyze the Rendered Appearance of PDFs. The current system excels at dissecting a PDF's internal structure but is "blind" to how a document is presented to the user. This next phase focuses on adding a visual "sense" to the system to detect a new class of threats.
+### 🏆 **Stable Reference: interrogation_node**  
+- **Status**: Production-ready single-graph forensic analysis
+- **Features**: Complete investigation workflow with proven malware detection
+- **Use For**: Reference implementation and fallback
 
-- Core Mission: Develop a new agent specializing in visual analysis to identify social engineering, psychological manipulation, and deception tactics that are invisible to the static analysis agent ("Dr. Reed").
-- Expert Persona: Empower this agent with a unique persona combining expertise in Human-Computer Interaction (HCI), UI/UX Security, and Cognitive Psychology to understand how visual layouts, branding, and design patterns can be used to mislead or coerce a user.
-- Analytical Workflow: Implement a "Data-Enriched Visual" workflow. The agent's primary task will be to cross-examine the rendered visual evidence (the PDF page as an image) against its underlying technical data (such as the actual destinations of hyperlinks) to spot inconsistencies and deceptive correlations.
-- Rich & Structured Feature Extraction: The agent's primary output must be a comprehensive, structured report of its findings, designed to fuel downstream analysis and the creation of a threat intelligence knowledge base. The agent should be guided to identify and categorize a wide range of visual features, including:
-      - Overall Assessment: A high-level verdict on the document's visual trustworthiness (e.g., Benign, Suspicious, Deceptive) and a confidence score.
-      - Brand & Authority Analysis: Identification of any impersonated brands or claims of authority, supported by evidence from the visual-technical cross-examination.
-      - Psychological Tactics: Categorization of observed deception techniques (e.g., creating false urgency, social proof, scarcity).
-      - Benign Signals: Recognition of legitimate design patterns and trust signals to help reduce false positives.
-      - Detailed Findings: A specific list of observations that connect visual elements (like a button or logo) to their underlying technical data and a description of why the element is noteworthy.
+### 🎨 **Experimental: visual_agent**
+- **Status**: Early development of visual analysis components
+- **Features**: Basic visual analysis prompts and persona definitions
+- **Use For**: Visual analysis development and experimentation
+
+### Current Development Status Summary
+
+**Architecture Evolution Complete**: ✅
+- Composed graph system with subgraph integration
+- Parallel processing engine with type safety
+- Multi-graph LangGraph Studio configuration
+- Schema-first design across all components
+
+**Production Capabilities**: ✅
+- Complete PDF data extraction (images, URLs, hashes)
+- Proven forensic malware detection workflow
+- Vendor-agnostic LLM integration
+- Comprehensive error handling and validation
+
+**Ready for Visual Analysis Integration**: ✅
+- Extensible architecture for additional subgraphs
+- Established patterns for cross-modal analysis
+- Type-safe interfaces for new analysis components
