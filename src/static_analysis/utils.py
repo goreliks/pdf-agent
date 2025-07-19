@@ -25,7 +25,7 @@ from static_analysis.schemas import ToolCallLog
 
 # --- LLM Helper ---
 
-def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel):
+def create_llm_chain(system_prompt: str, human_prompt: str, response_model: BaseModel, llm):
     """Helper function to create a structured LLM chain using PydanticOutputParser."""
     
     # Create the parser
@@ -44,7 +44,7 @@ def create_llm_chain(system_prompt: str, human_prompt: str, response_model: Base
     prompt = prompt.partial(format_instructions=parser.get_format_instructions())
     
     # Create LLM
-    llm = ChatOpenAI(model="gpt-4o", temperature=0)
+    # llm = ChatOpenAI(model="gpt-4o", temperature=0)
     
     # Create chain: prompt -> llm -> parser
     return prompt | llm | parser

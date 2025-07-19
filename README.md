@@ -15,6 +15,14 @@ The PDF Agent has evolved into a comprehensive analysis platform with three spec
 3. **🔍 Static Analysis Graph** - Forensic investigation workflow with proven malware detection
 4. **👁️ Visual Analysis Components** - *In Development* - Visual deception detection (see `visual_agent` branch)
 
+### 🆕 **Centralized LLM Configuration**
+
+The platform now features a centralized configuration system (`src/config.py`) that provides:
+- **Multi-Provider Support**: OpenAI, Azure, Anthropic, Google, Ollama, and Hugging Face
+- **Role-Based LLM Assignment**: Different models for triage, analysis, technical tasks, and strategic review
+- **Easy Model Switching**: Change providers across the entire platform from a single file
+- **Development Flexibility**: Quickly test different models for different analysis roles
+
 ### 🎯 **LangGraph Studio Integration**
 
 Three graphs are now available in LangGraph Studio:
@@ -34,12 +42,13 @@ Three graphs are now available in LangGraph Studio:
 
 ### 🏆 **Proven Capabilities**
 
+- 🔧 **Centralized LLM Configuration**: Multi-provider support with role-based model assignment
 - 🔍 **Enhanced Static Analysis**: Uses both `pdfid` and `pdf-parser` for comprehensive PDF structure analysis
-- 🤖 **LLM-Powered Investigation**: GPT-4 integration with "Dr. Evelyn Reed" forensic pathologist persona
+- 🤖 **LLM-Powered Investigation**: Multi-provider LLM integration with "Dr. Evelyn Reed" forensic pathologist persona
 - 📊 **Complete Forensic Workflow**: Multi-node investigation pipeline with triage → interrogation → strategic review → finalization
 - 🔗 **Advanced State Management**: Complex investigation state tracking with artifact cataloging
 - 📝 **Comprehensive Evidence Tracking**: Advanced artifact cataloging with file dump support
-- 🛡️ **Vendor-Agnostic LLM**: Compatible with any LLM provider via PydanticOutputParser
+- 🛡️ **Vendor-Agnostic LLM**: Compatible with any LLM provider via centralized configuration
 - 📋 **Detailed Reporting**: Structured analysis trails and comprehensive findings reports
 
 ## Recent Architecture Evolution
@@ -176,6 +185,7 @@ Access three specialized workflows:
 ```
 pdf-agent/
 ├── src/
+│   ├── config.py                     # 🆕 Centralized LLM configuration
 │   ├── pdf_hunter_main/          # 🆕 Master orchestrator graph
 │   │   ├── pdf_hunter_graph.py   # Composed workflow
 │   │   ├── schemas.py            # Input/output types
@@ -222,6 +232,53 @@ pdf-agent/
 ```bash
 OPENAI_API_KEY=your_api_key_here              # Required for LLM analysis
 PDFPARSER_OPTIONS=--verbose                   # Optional PDF parser settings
+```
+
+### LLM Configuration
+
+The platform uses a centralized configuration system in `src/config.py` for flexible LLM provider management:
+
+#### **Supported Providers**
+```python
+# OpenAI (Default)
+openai_4o = ChatOpenAI(model="gpt-4o", temperature=0)
+openai_o3_mini = ChatOpenAI(model="o3-mini", temperature=0)
+
+# Azure OpenAI
+# azure_gpt_4o = ChatAzure(model="gpt-4o", temperature=0)
+
+# Anthropic Claude
+# anthropic_claude_3_5_sonnet = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0)
+
+# Google Gemini
+# google_gemini_1_5_flash = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+
+# Ollama (Local)
+# ollama_llama3_8b = ChatOllama(model="llama3.8b", temperature=0)
+
+# Hugging Face
+# huggingface_qwen_vl = ChatHuggingFace(llm=hf_qwen_vl_pipeline)
+```
+
+#### **Role-Based Model Assignment**
+The static analysis workflow uses specialized models for different analysis roles:
+```python
+# Static Analysis Configuration
+STATIC_ANALYSIS_ANALYST_LLM = openai_4o        # Deep technical analysis
+STATIC_ANALYSIS_TRIAGE_LLM = openai_4o         # Initial assessment
+STATIC_ANALYSIS_TECHNICIAN_LLM = openai_4o     # Tool selection
+STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_4o  # High-level review
+
+# Visual Analysis Configuration (Future)
+VISUAL_ANALYSIS_ANALYST_LLM = openai_4o        # Visual deception detection
+```
+
+#### **Switching Providers**
+To use different providers, simply uncomment the desired models and update the role assignments:
+```python
+# Example: Use Claude for analysis, GPT-4 for triage
+STATIC_ANALYSIS_ANALYST_LLM = anthropic_claude_3_5_sonnet
+STATIC_ANALYSIS_TRIAGE_LLM = openai_4o
 ```
 
 ### LangGraph Configuration
