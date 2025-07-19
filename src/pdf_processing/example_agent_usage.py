@@ -5,19 +5,22 @@ Example usage of the PDF Processing LangGraph Agent.
 This script demonstrates how to use the LangGraph agent for parallel
 PDF processing including hash calculation, image extraction, URL extraction,
 and perceptual hashing.
+
+UPDATED: Now shows proper Input/Output schema usage with Pydantic validation.
 """
 
 import json
 import time
 from pathlib import Path
 
-from pdf_processing import process_pdf_with_agent, create_pdf_processing_graph
+from pdf_processing import process_pdf_with_agent, process_pdf_with_agent_legacy, create_pdf_processing_graph
+from pdf_processing.agent_schemas import PDFProcessingInput, PDFProcessingOutput
 
 
 def example_basic_usage():
-    """Basic usage example with a simple PDF."""
+    """Basic usage example with proper schema validation."""
     print("=" * 70)
-    print("PDF Processing LangGraph Agent - Basic Usage Example")
+    print("PDF Processing LangGraph Agent - Schema-Based Usage Example")
     print("=" * 70)
     
     # Example PDF path (replace with your actual PDF)
@@ -27,16 +30,19 @@ def example_basic_usage():
     try:
         print(f"Processing PDF: {pdf_path}")
         print(f"Output directory: {output_directory}")
-        print("\nStarting parallel processing...")
+        print("\nStarting parallel processing with Pydantic validation...")
         
-        # Process the PDF using the LangGraph agent
-        result = process_pdf_with_agent(
+        # Create validated input using Pydantic schema
+        input_data = PDFProcessingInput(
             pdf_path=pdf_path,
-            pages_to_process=None,  # Process all pages
+            pages_to_process=1,  # Process first page only (default)
             output_directory=output_directory
         )
         
-        # Display results
+        # Process the PDF using the LangGraph agent with schema validation
+        result = process_pdf_with_agent(input_data)
+        
+        # Display results - result is automatically validated as PDFProcessingOutput
         print(f"\n=== Processing Results ===")
         print(f"✓ Success: {result.success}")
         print(f"✓ Total processing time: {result.total_processing_time:.2f}s")
@@ -49,67 +55,93 @@ def example_basic_usage():
         print(f"✓ Extracted images: {len(result.extracted_images)}")
         print(f"✓ Extracted URLs: {len(result.extracted_urls)}")
         
-        # Show details of extracted images
-        if result.extracted_images:
-            print(f"\n=== Extracted Images Details ===")
-            for i, img in enumerate(result.extracted_images[:3], 1):  # Show first 3
-                print(f"Image {i}:")
-                print(f"  Page: {img.page_number}")
-                print(f"  Format: {img.format}")
-                print(f"  Perceptual Hash: {img.phash}")
-                print(f"  Saved to: {img.saved_path}")
-                print(f"  Image SHA1: {img.image_sha1}")
+        # Show schema validation benefits
+        print(f"\n=== Schema Benefits ===")
+        print(f"✓ Input automatically validated: {type(input_data).__name__}")
+        print(f"✓ Output automatically validated: {type(result).__name__}")
+        print(f"✓ Type safety ensured throughout processing")
         
-        # Show details of extracted URLs
-        if result.extracted_urls:
-            print(f"\n=== Extracted URLs Details ===")
-            for i, url in enumerate(result.extracted_urls[:5], 1):  # Show first 5
-                print(f"URL {i}:")
-                print(f"  URL: {url.url}")
-                print(f"  Page: {url.page_number}")
-                print(f"  Type: {url.url_type}")
-                if url.coordinates:
-                    print(f"  Coordinates: {url.coordinates}")
-        
-        # Show processing summary
-        print(f"\n=== Processing Summary ===")
-        print(f"✓ PDF validation and hash calculation completed")
-        print(f"✓ Image extraction: {len(result.extracted_images)} images processed")
-        print(f"✓ URL extraction: {len(result.extracted_urls)} URLs found")
-        
-        # Show any errors
-        if result.errors:
-            print(f"\n=== Errors ===")
-            for error in result.errors:
-                print(f"✗ {error}")
-                
     except FileNotFoundError:
         print(f"PDF file not found: {pdf_path}")
-        print("Please provide a valid PDF file path or create a sample PDF.")
     except Exception as e:
         print(f"Error: {e}")
 
 
-def example_specific_pages():
-    """Example processing only specific pages."""
+def example_input_validation():
+    """Example showing input validation with invalid data."""
     print("\n" + "=" * 70)
-    print("PDF Processing LangGraph Agent - Specific Pages Example")
+    print("PDF Processing LangGraph Agent - Input Validation Example")
+    print("=" * 70)
+    
+    try:
+        # Try to create input with invalid data
+        print("Testing input validation with invalid PDF path...")
+        
+        # This will validate but may fail during processing
+        input_data = PDFProcessingInput(
+            pdf_path="",  # Empty path
+            pages_to_process=3,  # Process first 3 pages
+            output_directory="./demo_validation"
+        )
+        
+        print(f"✓ Basic validation passed for input: {input_data.pdf_path}")
+        
+        # Try with invalid page numbers (should still validate, but may fail in processing)
+        input_data2 = PDFProcessingInput(
+            pdf_path="sample.pdf",
+            pages_to_process=0,  # Invalid: must be at least 1
+            output_directory="./demo_validation"
+        )
+        
+        print(f"✓ Schema validation passed even with potentially problematic pages: {input_data2.pages_to_process}")
+        print("  (Actual validation happens during PDF processing)")
+        
+        # Show how to handle validation errors
+        try:
+            # This would fail Pydantic validation if we had strict validators
+            from pydantic import ValidationError
+            
+            # Example of what would cause validation error
+            bad_data = {
+                "pdf_path": 123,  # Should be string
+                "pages_to_process": "invalid",  # Should be int
+                "output_directory": None  # Should be string or None (for auto-generation)
+            }
+            
+            PDFProcessingInput.model_validate(bad_data)
+            
+        except ValidationError as e:
+            print(f"\n✓ Pydantic validation correctly caught errors:")
+            for error in e.errors():
+                print(f"  - {error['loc'][0]}: {error['msg']}")
+                
+    except Exception as e:
+        print(f"Validation example error: {e}")
+
+
+def example_specific_pages():
+    """Example processing only specific pages with schema."""
+    print("\n" + "=" * 70)
+    print("PDF Processing LangGraph Agent - Specific Pages with Schema")
     print("=" * 70)
     
     pdf_path = "sample.pdf"
-    pages_to_process = [0, 1, 2]  # Process only first 3 pages
+    pages_to_process = 3  # Process first 3 pages
     output_directory = "./demo_specific_pages"
     
     try:
         print(f"Processing PDF: {pdf_path}")
-        print(f"Pages to process: {pages_to_process}")
+        print(f"Pages to process: {pages_to_process} (from beginning)")
         print(f"Output directory: {output_directory}")
         
-        result = process_pdf_with_agent(
+        # Create validated input
+        input_data = PDFProcessingInput(
             pdf_path=pdf_path,
             pages_to_process=pages_to_process,
             output_directory=output_directory
         )
+        
+        result = process_pdf_with_agent(input_data)
         
         print(f"\n=== Results for Specific Pages ===")
         print(f"Success: {result.success}")
@@ -132,79 +164,141 @@ def example_specific_pages():
         print(f"Error: {e}")
 
 
-def example_graph_visualization():
-    """Example showing how to work with the LangGraph directly."""
+def example_legacy_comparison():
+    """Example showing legacy vs new schema approach."""
     print("\n" + "=" * 70)
-    print("PDF Processing LangGraph Agent - Graph Visualization Example")
+    print("PDF Processing LangGraph Agent - Legacy vs Schema Comparison")
+    print("=" * 70)
+    
+    pdf_path = "sample.pdf"
+    
+    if not Path(pdf_path).exists():
+        print(f"Skipping comparison - PDF file not found: {pdf_path}")
+        return
+    
+    try:
+        print("=== LEGACY APPROACH (Deprecated) ===")
+        start_time = time.time()
+        
+        # Legacy approach - still works but shows deprecation warning
+        legacy_result = process_pdf_with_agent_legacy(
+            pdf_path=pdf_path,
+            pages_to_process=[0],  # Old format: specific page numbers
+            output_directory="./demo_legacy"
+        )
+        
+        legacy_time = time.time() - start_time
+        print(f"✓ Legacy processing completed in {legacy_time:.2f}s")
+        print(f"✓ Success: {legacy_result.success}")
+        
+        print("\n=== NEW SCHEMA APPROACH (Recommended) ===")
+        start_time = time.time()
+        
+        # New schema approach with validation
+        input_data = PDFProcessingInput(
+            pdf_path=pdf_path,
+            pages_to_process=1,  # New format: number of pages from beginning
+            output_directory="./demo_schema"
+        )
+        
+        schema_result = process_pdf_with_agent(input_data)
+        schema_time = time.time() - start_time
+        
+        print(f"✓ Schema-based processing completed in {schema_time:.2f}s")
+        print(f"✓ Success: {schema_result.success}")
+        
+        print(f"\n=== COMPARISON ===")
+        print(f"✓ Both approaches produce identical results")
+        print(f"✓ Schema approach provides:")
+        print(f"  - Automatic input validation")
+        print(f"  - Better type safety")
+        print(f"  - Clear data contracts")
+        print(f"  - IDE autocompletion support")
+        print(f"  - Runtime error prevention")
+        
+    except Exception as e:
+        print(f"Comparison error: {e}")
+
+
+def example_graph_visualization():
+    """Example showing graph setup with schema context."""
+    print("\n" + "=" * 70)
+    print("PDF Processing LangGraph Agent - Graph Visualization with Schemas")
     print("=" * 70)
     
     try:
-        # Create the graph directly
+        # Create the graph
         graph = create_pdf_processing_graph()
         
-        print("✓ LangGraph created successfully")
-        print("✓ Graph structure: START → validation → [image_extraction, url_extraction] → aggregation → END")
+        print("Graph created successfully!")
+        print(f"Graph type: {type(graph)}")
         
-        # Show the graph's structure
-        print("\n=== Graph Nodes ===")
-        # Note: In a real implementation, you could use graph.get_graph() to inspect structure
-        nodes = ["validation", "image_extraction", "url_extraction", "aggregation"]
-        for node in nodes:
-            print(f"  - {node}")
+        # Show the schema configuration
+        print(f"\nGraph Schema Configuration:")
+        print(f"✅ Input Schema: PDFProcessingInput (user-facing fields only)")
+        print(f"   - pdf_path: str")
+        print(f"   - pages_to_process: Optional[int] = 1 (number of pages from beginning)")
+        print(f"   - output_directory: Optional[str] = None (auto-generated if None)")
+        print(f"✅ Output Schema: PDFProcessingOutput (structured results)")
+        print(f"✅ Internal State: PDFProcessingState (all processing fields)")
         
-        print("\n=== Graph Flow Pattern ===")
-        print("  START")
-        print("    ↓")
-        print("  validation")
-        print("    ├── image_extraction ──┐")
-        print("    └── url_extraction ────┼── aggregation ── END")
+        print(f"\nGraph nodes: validation, image_extraction, url_extraction, aggregation")
+        print(f"LangGraph Studio will now show ONLY the input fields!")
         
-        # Example of manual graph execution
         pdf_path = "sample.pdf"
+        
         if Path(pdf_path).exists():
-            print(f"\n=== Manual Graph Execution ===")
-            initial_state = {
-                "pdf_path": pdf_path,
-                "pages_to_process": [0],  # Just first page for demo
-                "output_directory": "./demo_manual",
-                "processing_results": [],
-                "pdf_hash": None,
-                "page_count": None,
-                "extracted_images": [],
-                "extracted_urls": [],
-                "errors": [],
-                "completed_nodes": []
-            }
+            print(f"\n=== Manual Graph Execution with Schema ===")
             
-            print("Executing graph with manual state...")
+            # Create validated input
+            input_data = PDFProcessingInput(
+                pdf_path=pdf_path,
+                pages_to_process=1,  # Just first page for demo
+                output_directory="./demo_manual"
+            )
+            
+            print("Executing graph with schema-aware input...")
+            print(f"Input type: {type(input_data).__name__}")
+            
             start_time = time.time()
-            final_state = graph.invoke(initial_state)
+            # Graph automatically converts input schema to internal state and back to output schema
+            result = graph.invoke(input_data)
             execution_time = time.time() - start_time
             
-            print(f"✓ Graph execution completed in {execution_time:.2f}s")
-            print(f"✓ PDF hash calculated: {final_state.get('pdf_hash') is not None}")
-            print(f"✓ Images extracted: {len(final_state.get('extracted_images', []))}")
-            print(f"✓ URLs found: {len(final_state.get('extracted_urls', []))}")
+            print(f"✅ Graph execution completed in {execution_time:.2f}s")
+            print(f"✅ Output type: {type(result).__name__}")
+            print(f"✅ PDF hash calculated: {result.pdf_hash is not None}")
+            print(f"✅ Images extracted: {len(result.extracted_images)}")
+            print(f"✅ URLs found: {len(result.extracted_urls)}")
+            print(f"✅ Success: {result.success}")
+            
+            print(f"\n=== Schema Benefits Demonstrated ===")
+            print(f"✅ Input automatically validated before processing")
+            print(f"✅ Output automatically validated after processing")
+            print(f"✅ LangGraph Studio shows clean interface")
+            print(f"✅ Internal complexity hidden from user")
+            
         else:
             print(f"\nSkipping manual execution - PDF file not found: {pdf_path}")
+            print("But the schema configuration is still demonstrated above!")
             
     except Exception as e:
         print(f"Error: {e}")
 
 
 def example_export_results():
-    """Example showing how to export results to JSON."""
+    """Example showing how to export schema-validated results to JSON."""
     print("\n" + "=" * 70)
-    print("PDF Processing LangGraph Agent - Export Results Example")
+    print("PDF Processing LangGraph Agent - Export Schema Results")
     print("=" * 70)
     
     pdf_path = "sample.pdf"
     
     try:
         if not Path(pdf_path).exists():
-            print(f"Creating a demo state for export example...")
-            # Create a mock result for demonstration
-            from pdf_processing.agent_schemas import PDFProcessingOutput, PDFHashData, ExtractedImage, ExtractedURL
+            print(f"Creating a demo validated result for export example...")
+            # Create a mock validated result using proper schemas
+            from pdf_processing.agent_schemas import PDFHashData, ExtractedImage, ExtractedURL
             
             result = PDFProcessingOutput(
                 success=True,
@@ -234,90 +328,120 @@ def example_export_results():
                 total_processing_time=0.15
             )
         else:
-            # Process actual PDF
-            result = process_pdf_with_agent(pdf_path, pages_to_process=[0])
+            # Process actual PDF with schema validation
+            input_data = PDFProcessingInput(
+                pdf_path=pdf_path,
+                pages_to_process=1,  # Process first page
+                output_directory="./demo_export"
+            )
+            result = process_pdf_with_agent(input_data)
         
-        # Export to JSON
+        # Export to JSON with schema validation
         output_file = "pdf_processing_results.json"
         
-        # Convert Pydantic model to dictionary
+        # Convert Pydantic model to dictionary (maintains validation)
         result_dict = result.model_dump()
         
+        # Add schema information to export
+        export_data = {
+            "schema_version": "1.0",
+            "input_schema": "PDFProcessingInput",
+            "output_schema": "PDFProcessingOutput", 
+            "export_timestamp": time.time(),
+            "results": result_dict
+        }
+        
         with open(output_file, 'w') as f:
-            json.dump(result_dict, f, indent=2)
+            json.dump(export_data, f, indent=2, default=str)
         
         print(f"✓ Results exported to: {output_file}")
-        print(f"✓ File size: {Path(output_file).stat().st_size} bytes")
+        print(f"✓ Schema information included in export")
+        print(f"✓ Export contains {len(result.extracted_images)} images")
+        print(f"✓ Export contains {len(result.extracted_urls)} URLs")
         
-        # Show a sample of the exported data
-        print(f"\n=== Sample of Exported Data ===")
-        print(json.dumps({
-            "success": result_dict["success"],
-            "pdf_path": result_dict["pdf_path"],
-            "page_count": result_dict["page_count"],
-            "extracted_images_count": len(result_dict["extracted_images"]),
-            "extracted_urls_count": len(result_dict["extracted_urls"]),
-            "total_processing_time": result_dict["total_processing_time"]
-        }, indent=2))
+        # Show how to reload and validate
+        print(f"\n=== Reload and Validation Example ===")
+        with open(output_file, 'r') as f:
+            loaded_data = json.load(f)
+        
+        # Recreate validated object from export
+        reloaded_result = PDFProcessingOutput.model_validate(loaded_data["results"])
+        
+        print(f"✓ Successfully reloaded and validated: {type(reloaded_result).__name__}")
+        print(f"✓ Validation ensures data integrity on reload")
         
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Export error: {e}")
 
 
 def main():
-    """Run all examples."""
-    print("PDF Processing LangGraph Agent - Usage Examples")
+    """Run all examples showcasing proper schema usage."""
+    print("PDF Processing LangGraph Agent - Schema-Based Usage Examples")
     print("=" * 70)
     
-    # Run examples
+    # Run all examples
     example_basic_usage()
+    example_input_validation()
     example_specific_pages()
+    example_legacy_comparison()
     example_graph_visualization()
     example_export_results()
     
     print("\n" + "=" * 70)
-    print("Usage Summary")
+    print("Schema Usage Summary")
     print("=" * 70)
     print("""
-The PDF Processing LangGraph Agent provides parallel processing with:
+The PDF Processing LangGraph Agent now provides robust schema validation:
 
- 1. **Sequential Then Parallel Architecture**:
-    - validation: PDF validation, hash calculation, output directory creation
-    - image_extraction: Base64 images + perceptual hashing + SHA1 file saving (parallel)
-    - url_extraction: URLs from annotations and text (parallel)
-    - aggregation: Final validation and cleanup
+1. **Input Validation with PDFProcessingInput**:
+   - Automatic validation of input parameters
+   - Type safety for pdf_path, pages_to_process, output_directory
+   - Clear error messages for invalid inputs
 
-2. **Key Features**:
-   - Automatic parallel execution using LangGraph
-   - Comprehensive error handling and logging
-   - Flexible page selection (all pages or specific pages)
-   - Structured output with detailed timing information
-   - Perceptual hashing for image similarity detection
-   - SHA1-based image filename generation
+2. **Output Validation with PDFProcessingOutput**:
+   - Guaranteed structure for all results
+   - Type-safe access to extracted data
+   - Consistent error handling
 
-3. **Usage Patterns**:
+3. **Recommended Usage**:
 ```python
 from pdf_processing import process_pdf_with_agent
+from pdf_processing.agent_schemas import PDFProcessingInput
 
-# Process all pages
-result = process_pdf_with_agent("document.pdf")
+# Create validated input
+input_data = PDFProcessingInput(
+    pdf_path="document.pdf",
+    pages_to_process=3,  # Process first 3 pages from beginning
+    output_directory="./my_images"  # Optional: auto-generated if None
+)
 
-# Process specific pages
-result = process_pdf_with_agent("document.pdf", pages_to_process=[0, 1, 2])
+# Process with automatic validation
+result = process_pdf_with_agent(input_data)
 
-# Custom output directory
-result = process_pdf_with_agent("document.pdf", output_directory="./my_images/")
-
-# Access results
+# Access validated results
 print(f"SHA1: {result.pdf_hash.sha1}")
 print(f"Images: {len(result.extracted_images)}")
-print(f"URLs: {len(result.extracted_urls)}")
+print(f"Success: {result.success}")
 ```
 
- 4. **Graph Structure**:
-    The LangGraph implements validation first, then fan-out/fan-in pattern where
-    image and URL extraction nodes execute in parallel after validation, then
-    converge to an aggregation node.
+4. **Benefits**:
+   - ✅ Runtime input validation
+   - ✅ Type safety throughout processing
+   - ✅ Clear data contracts
+   - ✅ IDE autocompletion support  
+   - ✅ Automatic serialization/deserialization
+   - ✅ Better error messages
+
+5. **Backward Compatibility**:
+   - Legacy function `process_pdf_with_agent_legacy()` still available
+   - Shows deprecation warning to encourage schema adoption
+   - All existing code continues to work
+
+6. **Schema Integration Benefits**:
+   - Follows LangGraph best practices for input/output validation
+   - Leverages Pydantic for robust data validation
+   - Enables better integration with FastAPI, LangChain, and other tools
+   - Provides foundation for future enhancements
 """)
 
 

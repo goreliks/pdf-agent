@@ -62,6 +62,7 @@ class EvidenceLocker(BaseModel):
     indicators_of_compromise: List[IndicatorOfCompromise] = Field(default_factory=list)
 
 class ForensicCaseFileInput(BaseModel):
+    """Input model for the Forensic Analysis Agent."""
     file_path: str = Field(..., description="The local path to the PDF file to be analyzed.")
 
 
@@ -97,6 +98,32 @@ class ForensicCaseFile(BaseModel):
 
 
 # --- 2. LLM Interaction Schemas ---
+# Output schema for LangGraph Studio
+class ForensicCaseFileOutput(BaseModel):
+    """
+    Output model for the Forensic Analysis Agent.
+    
+    This model guarantees the structure and types of all forensic analysis results,
+    providing type safety for downstream consumers and a clean interface for LangGraph Studio.
+    """
+    success: bool = Field(..., description="Whether the overall forensic analysis was successful")
+    file_path: str = Field(..., description="Path to the analyzed PDF file")
+    file_hash_sha256: Optional[str] = Field(None, description="SHA256 hash of the analyzed file")
+    analysis_session_id: str = Field(..., description="Unique identifier for this analysis session")
+    verdict: Verdict = Field(..., description="Final verdict of the analysis")
+    phase: AnalysisPhase = Field(..., description="Final phase of the analysis")
+    current_hypothesis: Optional[str] = Field(None, description="Final working hypothesis about the threat")
+    narrative_coherence_score: float = Field(..., description="Final coherence score (0.0 = highly deceptive, 1.0 = coherent)")
+    total_interrogation_steps: int = Field(..., description="Total number of interrogation steps performed")
+    indicators_of_compromise: List[IndicatorOfCompromise] = Field(
+        default_factory=list, 
+        description="List of indicators of compromise found"
+    )
+    attack_chain_length: int = Field(0, description="Number of attack chain links discovered")
+    extracted_artifacts_count: int = Field(0, description="Number of artifacts extracted from the PDF")
+    final_report: Optional[str] = Field(None, description="Final analysis report summary")
+    errors: List[str] = Field(default_factory=list, description="List of errors encountered during analysis")
+
 
 class TriageAnalysis(BaseModel):
     """The required JSON structure for the LLM's triage analysis."""

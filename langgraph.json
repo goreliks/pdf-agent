@@ -1,7 +1,8 @@
 {
     "dependencies": ["."],
     "graphs": {
-      "agent": "./src/static_analysis/graph.py:app"
+      "agent": "./src/static_analysis/graph.py:app",
+      "pdf_processing": "./src/pdf_processing/pdf_agent.py:app"
     },
     "env": ".env"
   }

@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 # Import our schemas, prompts, and utils
 from static_analysis.schemas import (
-    ForensicCaseFile, InvestigationTask, ForensicCaseFileInput, TriageAnalysis,
+    ForensicCaseFile, InvestigationTask, ForensicCaseFileInput, ForensicCaseFileOutput, TriageAnalysis,
     ToolAndTaskSelection, InterrogationAnalysis, AttackChainLink, StrategicReview
 )
 from static_analysis.prompts import (
@@ -21,7 +21,7 @@ from static_analysis.utils import create_llm_chain, run_pdfid, run_pdf_parser_fu
 tool_executor = ToolExecutor(manifest=TOOL_MANIFEST)
 
 # --- CONFIGURATION ---
-MAX_INTERROGATION_STEPS = 10 # Circuit breaker for infinite loops
+MAX_INTERROGATION_STEPS = 12 # Circuit breaker for infinite loops
 
 
 
@@ -233,14 +233,47 @@ def finalize_node(state: ForensicCaseFile) -> Dict[str, Any]:
 
     # Return the final report to be included in the state
     return {"final_report": final_report_summary}
+
+
+def convert_to_output_schema(state: ForensicCaseFile) -> ForensicCaseFileOutput:
+    """
+    Convert the internal ForensicCaseFile state to the ForensicCaseFileOutput schema.
+    This provides a clean, user-facing output format for LangGraph Studio.
+    """
+    return ForensicCaseFileOutput(
+        success=len(state.errors) == 0,
+        file_path=state.file_path,
+        file_hash_sha256=state.file_hash_sha256,
+        analysis_session_id=state.analysis_session_id,
+        verdict=state.verdict,
+        phase=state.phase,
+        current_hypothesis=state.current_hypothesis,
+        narrative_coherence_score=state.narrative_coherence.score,
+        total_interrogation_steps=state.interrogation_steps,
+        indicators_of_compromise=state.evidence.indicators_of_compromise,
+        attack_chain_length=len(state.evidence.attack_chain),
+        extracted_artifacts_count=len(state.evidence.extracted_artifacts),
+        final_report=state.final_report,
+        errors=state.errors
+    )
     
 
 
 # --- 5. Graph Definition and Execution ---
 
 def create_app():
-    """Create and return the compiled LangGraph application."""
-    workflow = StateGraph(ForensicCaseFile)
+    """
+    Create and return the compiled LangGraph application with explicit input/output schemas.
+    
+    Input Schema: ForensicCaseFileInput (user-facing, only requires file_path)
+    Output Schema: ForensicCaseFileOutput (structured results for LangGraph Studio)
+    Internal State: ForensicCaseFile (complete forensic investigation state)
+    """
+    workflow = StateGraph(
+        state_schema=ForensicCaseFile,
+        input_schema=ForensicCaseFileInput,
+        output_schema=ForensicCaseFileOutput
+    )
     
     # Add all the nodes to the graph
     workflow.add_node("triage", triage_node)
@@ -265,6 +298,42 @@ def create_app():
 
 # Create the app instance for LangGraph CLI
 app = create_app()
+
+def process_pdf_with_forensic_agent(
+    input_data: ForensicCaseFileInput
+) -> ForensicCaseFileOutput:
+    """
+    Process a PDF using the LangGraph forensic agent with proper input/output schema handling.
+    
+    Args:
+        input_data: ForensicCaseFileInput with validated input parameters
+        
+    Returns:
+        ForensicCaseFileOutput with all forensic analysis results
+        
+    Example:
+        >>> from static_analysis.schemas import ForensicCaseFileInput
+        >>> input_data = ForensicCaseFileInput(file_path="suspicious.pdf")
+        >>> result = process_pdf_with_forensic_agent(input_data)
+        >>> print(f"Verdict: {result.verdict}")
+        >>> print(f"IoCs found: {len(result.indicators_of_compromise)}")
+    """
+    # Input is already validated as ForensicCaseFileInput by function signature
+    
+    # Create the processing graph
+    graph = create_app()
+    
+    # Execute the graph with the validated input
+    # LangGraph will automatically handle schema conversion
+    final_result = graph.invoke(input_data.model_dump())
+    
+    # The graph should return ForensicCaseFileOutput based on our output_schema
+    # But let's ensure it's properly typed
+    if isinstance(final_result, dict):
+        return ForensicCaseFileOutput(**final_result)
+    else:
+        return final_result
+
 
 def main():
     """Main function for running the forensic analysis."""
