@@ -1,5 +1,6 @@
 import json
 from typing import Dict, Any
+import uuid
 
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ from config import STATIC_ANALYSIS_ANALYST_LLM, STATIC_ANALYSIS_TRIAGE_LLM, STAT
 tool_executor = ToolExecutor(manifest=TOOL_MANIFEST)
 
 # --- CONFIGURATION ---
-MAX_INTERROGATION_STEPS = 12 # Circuit breaker for infinite loops
+MAX_INTERROGATION_STEPS = 15 # Circuit breaker for infinite loops
 
 
 
@@ -43,6 +44,19 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
     print("[*] Dr. Reed is performing initial triage...")
     llm_response = chain.invoke({"triage_context": triage_context})
 
+    investigation_queue = [
+        InvestigationTask(
+            task_id=f"task_{uuid.uuid4().hex[:8]}_{task.label}",
+            label=task.label,
+            object_id=task.object_id,
+            artifact_id=task.artifact_id,
+            priority=task.priority,
+            reason=task.reason,
+            context_data=task.context_data
+        )
+        for task in llm_response.investigation_queue
+    ]
+
     # Create an initial EvidenceLocker
     initial_evidence = {
         "structural_summary": {"pdfid": pdfid_output, "pstats": stats_output}
@@ -57,7 +71,7 @@ def triage_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "verdict": llm_response.verdict,
         "phase": llm_response.phase,
         "current_hypothesis": llm_response.hypothesis,
-        "investigation_queue": llm_response.investigation_queue,
+        "investigation_queue": investigation_queue,
         "analysis_trail": [llm_response.analysis_trail],
         "evidence": initial_evidence,
         "narrative_coherence": initial_narrative,
@@ -77,7 +91,7 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         return {"errors": ["Interrogation node called with an empty queue."], "interrogation_steps": current_steps}
     
     # Provide the agent with a lookahead of the next few tasks
-    task_lookahead = state.investigation_queue[:5]
+    task_lookahead = state.investigation_queue[:10]
     
     print("[*] Dr. Reed is in instrumental mode (selecting task and tool)...")
     technician_chain = create_llm_chain(SYSTEM_PROMPT, TECHNICIAN_HUMAN_PROMPT, ToolAndTaskSelection, STATIC_ANALYSIS_TECHNICIAN_LLM)
@@ -109,10 +123,23 @@ def interrogation_node(state: ForensicCaseFile) -> Dict[str, Any]:
         "initial_report": json.dumps(state.evidence.structural_summary),
         "tool_manifest": json.dumps(TOOL_MANIFEST)
     })
+
+    new_tasks = [
+        InvestigationTask(
+            task_id=f"task_{uuid.uuid4().hex[:8]}_{task.label}",
+            label=task.label,
+            object_id=task.object_id,
+            artifact_id=task.artifact_id,
+            priority=task.priority,
+            reason=task.reason,
+            context_data=task.context_data
+        )
+        for task in analysis.new_tasks
+    ]
     
     # Remove the completed task from the queue and add any new ones
     remaining_tasks = [t for t in state.investigation_queue if t.task_id != tool_selection.chosen_task.task_id]
-    new_queue = analysis.new_tasks + remaining_tasks
+    new_queue = new_tasks + remaining_tasks
     
     # --- Process and Catalog New Evidence ---
     # Create a deep copy of the evidence to safely modify it
@@ -372,7 +399,9 @@ def main():
     
     final_state_dict = None
     # Use stream with "values" mode to get accumulated state at each step
-    for event in app.stream(inputs.model_dump(), stream_mode="values"):
+    # Set a higher recursion limit to allow the graph to complete properly
+    config = {"recursion_limit": 50}
+    for event in app.stream(inputs.model_dump(), stream_mode="values", config=config):
         # In "values" mode, event is the complete accumulated state after each node
         print(f"--- Node completed, current accumulated state available ---")
         final_state_dict = event  # This will be the complete state, not just partial updates
