@@ -104,17 +104,29 @@ def _base64_decode_tool(input_string: str) -> Dict[str, Any]:
     except Exception as e:
         return {"stdout": "", "stderr": f"ERROR: Failed to decode Base64 string: {e}", "return_code": 1}
 
+# In src/static_analysis/utils.py
+
 def _decode_hex_string_tool(input_string: str) -> Dict[str, Any]:
-    """A safe Python function to decode a hex string."""
+    """A safe Python function to decode a hex string, automatically cleaning delimiters."""
     try:
-        cleaned_string = "".join(input_string.split())
+        # This regex will find hex strings within <...> or "..." or just on their own.
+        # It's non-greedy, so it will stop at the first closing delimiter.
+        match = re.search(r'[<"]?([a-fA-F0-9\s]+)[>"]?', input_string)
+        if not match:
+            return {"stdout": "", "stderr": "ERROR: No valid hexadecimal string found within the input.", "return_code": 1}
+        
+        # Extract the matched group and remove any whitespace (like newlines)
+        cleaned_string = "".join(match.group(1).split())
+
         if len(cleaned_string) % 2 != 0:
-            return {"stdout": "", "stderr": "ERROR: Hex string must have an even number of characters.", "return_code": 1}
+            # This is a genuine error - the hex itself is malformed.
+            return {"stdout": "", "stderr": f"ERROR: The extracted hex string '{cleaned_string[:30]}...' is malformed with an uneven number of characters.", "return_code": 1}
         
         decoded_bytes = bytes.fromhex(cleaned_string)
         try:
             stdout = decoded_bytes.decode('utf-8')
         except UnicodeDecodeError:
+            # It's binary data, not text. Represent it safely.
             stdout = "Decoded binary content (non-UTF-8), showing hex representation: " + decoded_bytes.hex()
         return {"stdout": stdout, "stderr": "", "return_code": 0}
     except ValueError:

@@ -3,13 +3,13 @@ TOOL_MANIFEST = [
     # --- PDF-Parser "Expert Actions" ---
     {
         "tool_name": "pdf_parser_inspect_object",
-        "description": "Primary Analysis Tool: Inspects an object's dictionary to see its keys and values (e.g., /Type, /Filter, /Length). It does NOT decompress or show the stream's content.",
+        "description": "Primary Analysis Tool for VISIBLE objects. Inspects a standard object's dictionary. If this tool returns an empty output, the object is likely hidden in an Object Stream and you MUST use 'diagnose_hidden_object' next.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
     {
         "tool_name": "diagnose_hidden_object",
-        "description": "Diagnostic Tool: Use this ONLY when 'pdf_parser_inspect_object' on a specific object ID returns an empty output. It finds the Object Stream that contains the hidden object.",
+        "description": "Primary Diagnostic Tool for HIDDEN objects. Takes a specific object_id that was not found by 'pdf_parser_inspect_object' and discovers the Object Stream that contains it, revealing its true definition.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} -O {file_path}",
         "input_schema": {"object_id": "integer", "file_path": "string"}
     },
@@ -17,7 +17,7 @@ TOOL_MANIFEST = [
     # --- Stream & File Handling ---
     {
         "tool_name": "dump_filtered_stream",
-        "description": "Applies a stream's filters (e.g., /FlateDecode) and saves its internal, decoded content to a file. This is the main tool for isolating a stream's payload for further analysis with tools like 'view_file_strings'.",
+        "description": "Extracts and decodes the content of ANY object with a stream. Applies a stream's filters (e.g., /FlateDecode) and saves its internal, decoded content to a file. This is the main tool for isolating a stream's payload for further analysis with tools like 'view_file_strings'.",
         "command_template": "python3 src/static_analysis/tools/pdf-parser.py --object {object_id} --filter --dump {output_file} {file_path}",
         "input_schema": {"object_id": "integer", "output_file": "string", "file_path": "string"}
     },
@@ -40,6 +40,12 @@ TOOL_MANIFEST = [
         "description": "Decodes a single, clean string of Base64-encoded text.",
         "is_python_function": True,
         "input_schema": {"input_string": "string"}
+    },
+    {
+        "tool_name": "view_file_hex",
+        "description": "Views the full hexadecimal and ASCII representation of a binary file. Use this when 'view_file_strings' yields no or unhelpful output, as it reveals the raw file structure and potential embedded data or code.",
+        "command_template": "xxd {file_path}",
+        "input_schema": {"file_path": "string"}
     },
 ]
 
@@ -71,7 +77,7 @@ Examine the following `pdfid` and `pstats` (pdf-parser) output through this lens
 {triage_context}
 ```
 
-Based on your holistic analysis, provide your expert judgment. If the file's character gives you **any** reason to doubt its benign nature, you must suspend the presumption of innocence, declare the verdict as `SUSPICIOUS`, formulate a concise working hypothesis, and queue the anomalous indicators for `INTERROGATION`.
+Based on your holistic analysis, provide your expert judgment. If the file's character gives you **any** reason to doubt its benign nature, you must suspend the presumption of innocence, declare the verdict as `SUSPICIOUS`, formulate a concise working hypothesis, and queue the anomalous indicators for `INTERROGATION`. For each task, provide a concise label that describes its purpose (e.g., 'inspect_object_7').
 """
 
 TECHNICIAN_HUMAN_PROMPT = """Dr. Reed, you are in **instrumental mode**. Your current hypothesis is: "{hypothesis}"
@@ -94,7 +100,7 @@ And here is the current evidence locker, containing artifacts you have discovere
 ```
 
 **Your Task:**
-1. **Select the Task:** Choose the single most logical task from the `task_lookahead` list to execute right now.
+1. **Select the Task:** Choose the single most logical task from the `task_lookahead` list to execute right now. The most recent finding is your lifeline—prioritize tasks that directly extend its thread, testing or advancing your hypothesis based on the freshest evidence.
 2. **Select the Tool:** Now, read the reason for the task you just selected. Based **explicitly on that reasoning**, select the single best tool from the manifest to accomplish that specific goal. The reason for the task is your primary guide for tool selection.
 3. **Provide Arguments:**
    - If the task provides an artifact_id:
@@ -129,16 +135,22 @@ ANALYST_HUMAN_PROMPT = """Dr. Reed, you are in **analytical mode**. A pathologis
 
 **The Pathologist's Method:**
 You will now perform a forensic analysis by applying your principles to the new evidence. Answer these three questions to structure your response.
-1.  **What is the Finding? (Interpretation)** - Starting with the tool_log_entry as your primary source of truth, what does the output reveal?
+1.  **What is the Finding? (Interpretation)** - Starting with the tool_log_entry as your primary source of truth, what does the output reveal? If the output is unexpectedly empty or lacks substance, this is not a dead end—it is a symptom. In PDF pathology, one of the most common forms of Deception is structural concealment. This renders them invisible to a standard inspection but not to the document itself.
     - Compare this new, factual evidence against both the Initial Intelligence Report and your current_hypothesis. Does it confirm a lead, challenge your theory, or open a new line of inquiry?
+    - When you observe the symptom of a missing object, your primary hypothesis must be to question how it is being concealed. Your next step must be to challenge this specific form of concealment directly. Review your tool manifest: do you possess a diagnostic instrument designed to find objects hidden in precisely this manner?
 2.  **What is the Evidence? (Classification & Cataloging)** - Examine the finding through the lens of your principles. Did you find Deception (obfuscated data), Incoherence (empty or unexpected results), or other clear indicators?
     - You must formally catalog everything of significance. This is a non-negotiable part of your method:
+      -- **Isolate the Sample:** If your tool output contains a smaller, self-contained piece of encoded data (e.g., a long hex string, a Base64 blob), you MUST create a **new `ExtractedArtifact`** for that specific piece of data.
+         --- Set its `content_decoded` to the raw, unmodified data string you found.
+         --- Set its `encoding` field to classify the data (e.g., 'hex', 'base64', 'javascript'). This classification is your hypothesis about the sample.
+         --- Your interpretation of that data belongs in the `analysis_notes`.
       -- For in-memory data: When creating an ExtractedArtifact from tool output, its content_decoded field MUST contain the raw, unmodified data string exactly as it appears in the tool output. Your interpretation of that data belongs in the analysis_notes.
       -- For saved files: If a tool reports that it has saved data to a file, you MUST create an ExtractedArtifact representing that file. Set its file_path to the reported filename and leave content_decoded as null.
       -- Create all necessary IndicatorOfCompromise(s).
 3.  **What is the Next Step? (Synthesis & Planning)**
+    - Before proposing the next task, reflect: Does this finding align with autonomy, deception, or incoherence? Use this lens to select a step that cuts deepest into the file’s true nature.
     - Review your interpretation and the evidence you just cataloged. Your goal is to find the most direct path to the truth. The investigation must always progress from the general to the specific.
-    - What is the single, most critical follow-up task that will most efficiently advance your understanding and test your hypothesis? This could be diagnosing a container, decoding a sample, or investigating a new lead.
+    - What is the single, most critical follow-up task that will most efficiently advance your understanding and test your hypothesis? For each task, provide a concise label that describes its purpose (e.g., 'decode_hex_string').
     - Formulate a new, focused list of tasks with this single highest-priority action at the top.
 
 Synthesize your answers to these three questions into a single, coherent response in the required format. Provide your findings summary and the new investigation queue.
@@ -173,13 +185,16 @@ CONTEXT: YOUR RECENT HISTORY
 Your mandate is to ensure the investigation is not just correct, but ruthlessly efficient. You must aggressively manage the investigation queue based on the last_finding and your recent history.
 
 Your method is one of constant Plan Refinement:
-1. **Prioritize the Active Thread:** Your highest priority is to fully resolve the line of inquiry related to the `last_finding`. Do not get distracted by secondary leads until the current, active thread is either fully understood or hits a definitive dead end. If you just found a payload, your next steps MUST be to analyze that payload.
-2. **Consult Your History:** First, review your recent actions and thoughts. Are you about to repeat a failed action? Are you stuck in a logical circle? Use this context to break patterns and ensure forward progress.
-3. **Prune Obsolete Tasks:** For every task in the current queue, critically evaluate its reason. Does the last_finding or the current state of the evidence locker render that reason moot? If the knowledge you now possess fully satisfies the goal stated in the task's reason, the task is obsolete and you MUST remove it.
-4. **Refine and Replace:** For tasks that remain relevant, determine if the new knowledge allows you to transform a general inquiry into a specific one. A task's reason should evolve from 'search for a clue' to 'analyze the discovered clue'.
-5. **Incorporate New Leads:** If the finding reveals a completely new and unexpected line of inquiry, generate a new, high-priority task for it.
-6. **Prioritize the Final Queue:** Organize the remaining, refined, and new tasks into a final, optimal updated_queue. If the queue is now empty because all objectives have been met, return an empty list.
-7. **Update Coherence Score:** Finally, based on the last_finding, make a judgment. Does it confirm deception, autonomy, or incoherence? If so, the score must decrease. If it resolves a prior anomaly and points towards a benign explanation, the score may increase.
+1. **Check for Mission Completion:** Has the `last_finding` fully confirmed your `current_hypothesis` with concrete evidence (e.g., a decoded payload, a malicious URL and script)? If the core pathological mechanism of the file has been laid bare, the primary investigation is over. Aggressively prune ALL remaining tasks that were designed to find this evidence. Your new goal is cleanup and final reporting, not further searching. If the queue becomes empty as a result, that is the correct outcome.
+2. **Prioritize the Active Thread:** Your highest priority is to fully resolve the line of inquiry related to the last_finding. Do not get distracted by secondary leads until the current, active thread is either fully understood or hits a definitive dead end. If you just found a payload (like a script or encoded data), your next steps MUST be to analyze that payload. If you just found a reference to another object, your next step MUST be to investigate that specific object.
+3. **Re-evaluate Loose Ends:** Review the `evidence.attack_chain`. Are there any promising threads (e.g., an un-analyzed object referenced by a /Launch action) that were abandoned in favor of a newer finding? Consider re-prioritizing tasks to resolve these critical but forgotten leads.
+4. **Consult Your History & Prune Failures:** Review your recent actions and their outcomes in the tool log. If a tool has been applied to the same input multiple times without yielding new insights, this is a pathological loop—a waste of effort. A true pathologist adapts: abandon ineffective methods and pivot to unexplored techniques that could reveal hidden truths.
+5. **Prune Obsolete Tasks:** For every task in the current queue, critically evaluate its reason. Does the last_finding or the current state of the evidence locker render that reason moot? If the knowledge you now possess fully satisfies the goal stated in the task's reason, the task is obsolete and you MUST remove it. Be aggressive; an efficient investigation has no room for redundant steps.
+6. **Refine and Replace:** For tasks that remain relevant, determine if the new knowledge allows you to transform a general inquiry into a specific one. A task's reason should evolve from 'search for a clue' to 'analyze the discovered clue'.
+7. **Incorporate New Leads:** If the finding reveals a completely new and unexpected line of inquiry, generate a new, high-priority task for it.
+8. **Prioritize the Final Queue:** Organize the remaining, refined, and new tasks into a final, optimal updated_queue. This queue should represent the single most logical and efficient path forward, starting with the most critical task at the top. If the queue is now empty because all objectives have been met, return an empty list.
+9. **Update Coherence Score:** Finally, based on the last_finding, make a judgment. Does it confirm deception, autonomy, or incoherence? If so, the score must decrease. If it resolves a prior anomaly and points towards a benign explanation, the score may increase.
+10. **Detect Pathological Loops:** Review the recent_tool_log. If you see the same tool being used on the same artifact_id or object_id multiple times in a row without producing new, substantive findings, you are in a loop. You MUST change the strategy. If you have no other tools to apply, you must formally declare the artifact as 'Unable to be analyzed with current tools' and move to the next highest-priority thread.
 
 Provide a complete response, including your updated_queue that represents the most logical and efficient path forward, updated_hypothesis, reasoning (you should explicitly state the principle behind your changes), and the updated_coherence_score.
 
