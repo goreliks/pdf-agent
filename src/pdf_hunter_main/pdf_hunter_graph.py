@@ -8,6 +8,8 @@ Flow: PDF Processing -> Transform -> Static Analysis -> Final Aggregation
 """
 
 import time
+from datetime import datetime
+import pathlib
 from typing import Dict, Any
 
 from langgraph.graph import StateGraph, START, END
@@ -18,6 +20,12 @@ from pdf_processing.agent_schemas import PDFProcessingInput
 
 from static_analysis.graph import app as static_analysis_app  
 from static_analysis.schemas import ForensicCaseFileInput, ForensicCaseFile, ForensicCaseFileOutput, Verdict, AnalysisPhase
+
+from visual_analysis.graph import app as visual_analysis_app
+from visual_analysis.schemas import VisualAnalysisInput, VisualAnalysisOutput
+
+# Import utility for file saving
+from pdf_processing.utils import ensure_output_directory
 
 # Import our main schemas
 try:
@@ -91,8 +99,11 @@ def static_analysis_node(state: PDFHunterState) -> Dict[str, Any]:
             file_path=state["pdf_path"]
         )
         
-        # Invoke the static analysis subgraph
-        forensic_result_dict = static_analysis_app.invoke(forensic_input.model_dump())
+        # Invoke the static analysis subgraph with higher recursion limit to allow circuit breaker to work
+        forensic_result_dict = static_analysis_app.invoke(
+            forensic_input.model_dump(), 
+            {"recursion_limit": 20}  # Allow enough steps for circuit breaker (MAX_INTERROGATION_STEPS=12)
+        )
         
         # Debug: Print what we actually received
         print(f"🔍 Debug: Static analysis returned type: {type(forensic_result_dict)}")
@@ -193,17 +204,141 @@ def static_analysis_node(state: PDFHunterState) -> Dict[str, Any]:
         }
 
 
+def visual_analysis_node(state: PDFHunterState) -> Dict[str, Any]:
+    """
+    Node that invokes the visual analysis subgraph.
+    
+    Uses extracted images and URLs from PDF processing to perform
+    visual deception analysis.
+    """
+    try:
+        print("👁️  Starting Visual Analysis subgraph...")
+        
+        # Get PDF processing results to extract images and URLs
+        pdf_result = state.get("pdf_processing_result")
+        
+        if not pdf_result or not pdf_result.success:
+            print("⚠️  Visual analysis skipped: PDF processing failed or unavailable")
+            return {
+                "errors": ["Visual analysis skipped: PDF processing failed"],
+                "visual_analysis_result": None
+            }
+        
+        # Check if we have images to analyze
+        if not pdf_result.extracted_images:
+            print("⚠️  Visual analysis skipped: No images extracted from PDF")
+            return {
+                "errors": ["Visual analysis skipped: No images available"],
+                "visual_analysis_result": None
+            }
+        
+        # Transform to visual analysis input using extracted data
+        visual_input = VisualAnalysisInput(
+            extracted_images=pdf_result.extracted_images,
+            extracted_urls=pdf_result.extracted_urls,
+            output_directory=state.get("output_directory")
+        )
+        
+        print(f"   - Images to analyze: {len(pdf_result.extracted_images)}")
+        print(f"   - URLs for cross-modal analysis: {len(pdf_result.extracted_urls)}")
+        
+        # Invoke the visual analysis subgraph
+        visual_result_dict = visual_analysis_app.invoke(visual_input.model_dump())
+        
+        # Handle the result - LangGraph converts Pydantic objects to dictionaries between subgraphs
+        if isinstance(visual_result_dict, dict):
+            # Check if it has final_output (from aggregation_node)
+            if "final_output" in visual_result_dict:
+                final_output_data = visual_result_dict["final_output"]
+                # The final_output might be a VisualAnalysisOutput object or a dictionary
+                if isinstance(final_output_data, VisualAnalysisOutput):
+                    visual_result = final_output_data
+                elif isinstance(final_output_data, dict):
+                    # Convert the dictionary back to VisualAnalysisOutput
+                    try:
+                        visual_result = VisualAnalysisOutput(**final_output_data)
+                        print(f"✅ Successfully converted visual analysis dictionary to VisualAnalysisOutput")
+                    except Exception as e:
+                        print(f"⚠️  Failed to convert final_output dictionary: {str(e)}")
+                        visual_result = VisualAnalysisOutput(
+                            success=False,
+                            total_pages_analyzed=0,
+                            overall_verdict="Suspicious",
+                            overall_confidence=0.0,
+                            executive_summary=f"final_output conversion failed: {str(e)}",
+                            errors=[f"final_output conversion failed: {str(e)}"]
+                        )
+                else:
+                    print(f"⚠️  Unexpected final_output type: {type(final_output_data)}")
+                    visual_result = VisualAnalysisOutput(
+                        success=False,
+                        total_pages_analyzed=0,
+                        overall_verdict="Suspicious",
+                        overall_confidence=0.0,
+                        executive_summary=f"Unexpected final_output type: {type(final_output_data)}",
+                        errors=[f"Unexpected final_output type: {type(final_output_data)}"]
+                    )
+            else:
+                # Try to convert the entire dict to VisualAnalysisOutput (fallback)
+                try:
+                    visual_result = VisualAnalysisOutput(**visual_result_dict)
+                    print(f"✅ Successfully converted entire visual analysis dictionary to VisualAnalysisOutput")
+                except Exception as e:
+                    print(f"⚠️  Failed to convert visual analysis result: {str(e)}")
+                    visual_result = VisualAnalysisOutput(
+                        success=False,
+                        total_pages_analyzed=0,
+                        overall_verdict="Suspicious",
+                        overall_confidence=0.0,
+                        executive_summary=f"Conversion failed: {str(e)}",
+                        errors=[f"Result conversion failed: {str(e)}"]
+                    )
+        elif isinstance(visual_result_dict, VisualAnalysisOutput):
+            visual_result = visual_result_dict
+        else:
+            # Fallback case
+            visual_result = VisualAnalysisOutput(
+                success=False,
+                total_pages_analyzed=0,
+                overall_verdict="Suspicious", 
+                overall_confidence=0.0,
+                executive_summary="Unexpected result format from visual analysis",
+                errors=[f"Unexpected result type: {type(visual_result_dict)}"]
+            )
+        
+        print(f"✅ Visual Analysis completed. Success: {visual_result.success}")
+        print(f"   - Verdict: {visual_result.overall_verdict}")
+        print(f"   - Confidence: {visual_result.overall_confidence:.2f}")
+        print(f"   - Pages analyzed: {visual_result.total_pages_analyzed}")
+        print(f"   - Deception tactics: {len(visual_result.all_deception_tactics)}")
+        print(f"   - High priority URLs: {len(visual_result.high_priority_urls)}")
+        
+        # Transform result back to main state
+        return {
+            "visual_analysis_result": visual_result
+        }
+        
+    except Exception as e:
+        error_msg = f"Visual analysis failed: {str(e)}"
+        print(f"❌ {error_msg}")
+        return {
+            "errors": [error_msg],
+            "visual_analysis_result": None
+        }
+
+
 def final_aggregation_node(state: PDFHunterState) -> PDFHunterOutput:
     """
-    Final aggregation node that combines results from both subgraphs 
+    Final aggregation node that combines results from all three subgraphs 
     into the final output schema.
     """
     try:
         print("📊 Performing final aggregation...")
         
-        # Get results from both subgraphs
+        # Get results from all subgraphs
         pdf_result = state.get("pdf_processing_result")
         forensic_result = state.get("static_analysis_result")
+        visual_result = state.get("visual_analysis_result")
         main_errors = state.get("errors", [])
         
         # Determine overall success - handle both dict and object types
@@ -217,7 +352,12 @@ def final_aggregation_node(state: PDFHunterState) -> PDFHunterOutput:
         else:
             forensic_success = forensic_result.success if forensic_result else False
             
-        overall_success = pdf_success and forensic_success and len(main_errors) == 0
+        if isinstance(visual_result, dict):
+            visual_success = visual_result.get("success", False)
+        else:
+            visual_success = visual_result.success if visual_result else False
+            
+        overall_success = pdf_success and forensic_success and visual_success and len(main_errors) == 0
         
         # Helper function to safely get attributes from dict or object
         def safe_get(obj, attr, default=None):
@@ -260,15 +400,53 @@ def final_aggregation_node(state: PDFHunterState) -> PDFHunterOutput:
             extracted_artifacts_count=safe_get(forensic_result, "extracted_artifacts_count"),
             forensic_session_id=safe_get(forensic_result, "analysis_session_id"),
             
+            # Visual Analysis Results
+            visual_verdict=safe_get(visual_result, "overall_verdict"),
+            visual_confidence=safe_get(visual_result, "overall_confidence"),
+            visual_pages_analyzed=safe_get(visual_result, "total_pages_analyzed"),
+            visual_executive_summary=safe_get(visual_result, "executive_summary"),
+            visual_deception_tactics_count=len(safe_get(visual_result, "all_deception_tactics", [])),
+            visual_benign_signals_count=len(safe_get(visual_result, "all_benign_signals", [])),
+            visual_high_priority_urls_count=len(safe_get(visual_result, "high_priority_urls", [])),
+            
             # Error aggregation
             pdf_processing_errors=safe_get(pdf_result, "errors", []),
             forensic_analysis_errors=safe_get(forensic_result, "errors", []),
+            visual_analysis_errors=safe_get(visual_result, "errors", []),
             
             # Timing will be set by the main processing function
             total_processing_time=None
         )
         
+        # Store the visual analysis result for access via property
+        if visual_result:
+            output._visual_analysis_result = visual_result
+        
         print(f"✅ Final aggregation completed. Overall success: {overall_success}")
+        
+        # Save the comprehensive results to a JSON file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_filename = f"pdf_hunter_report_{timestamp}.json"
+        
+        # Handle output directory
+        output_directory = state.get("output_directory")
+        if output_directory and output_directory.strip():
+            # Save in specified output directory
+            output_path = pathlib.Path(output_directory) / output_filename
+            ensure_output_directory(output_path)
+            print(f"[*] Saving PDF Hunter report to {output_path}...")
+        else:
+            # Save in current directory (like other agents do)
+            output_path = pathlib.Path(output_filename)
+            print(f"[*] Saving PDF Hunter report to {output_path}...")
+        
+        try:
+            with open(output_path, "w") as f:
+                f.write(output.model_dump_json(indent=2))
+            print("[*] PDF Hunter report saved successfully.")
+        except Exception as e:
+            print(f"[!] Failed to save PDF Hunter report: {str(e)}")
+            # Don't fail the entire process if saving fails
         
         return output
         
@@ -282,6 +460,7 @@ def final_aggregation_node(state: PDFHunterState) -> PDFHunterOutput:
             pdf_path=state.get("pdf_path", "unknown"),
             pdf_processing_errors=safe_get(pdf_result, "errors", []) if 'pdf_result' in locals() else [],
             forensic_analysis_errors=safe_get(forensic_result, "errors", []) if 'forensic_result' in locals() else [],
+            visual_analysis_errors=safe_get(visual_result, "errors", []) if 'visual_result' in locals() else [],
             total_processing_time=None
         )
 
@@ -290,8 +469,8 @@ def create_pdf_hunter_graph() -> StateGraph:
     """
     Create the main PDF Hunter graph with subgraph composition.
     
-    Graph Flow:
-    START -> pdf_processing (subgraph) -> static_analysis (subgraph) -> final_aggregation -> END
+    Enhanced Graph Flow:
+    START -> pdf_processing (subgraph) -> [static_analysis, visual_analysis] (parallel) -> final_aggregation -> END
     
     Input Schema: PDFHunterInput (user-facing fields only)
     Output Schema: PDFHunterOutput (comprehensive results)
@@ -310,12 +489,20 @@ def create_pdf_hunter_graph() -> StateGraph:
     # Add nodes - note that subgraphs are added as node functions, not directly
     builder.add_node("pdf_processing", pdf_processing_node)
     builder.add_node("static_analysis", static_analysis_node)
+    builder.add_node("visual_analysis", visual_analysis_node)
     builder.add_node("final_aggregation", final_aggregation_node)
     
-    # Create the sequential flow
+    # Create the enhanced flow with parallel analysis
     builder.add_edge(START, "pdf_processing")
+    
+    # After PDF processing, run static and visual analysis in parallel
     builder.add_edge("pdf_processing", "static_analysis")
+    builder.add_edge("pdf_processing", "visual_analysis")
+    
+    # Both analysis nodes feed into final aggregation
     builder.add_edge("static_analysis", "final_aggregation")
+    builder.add_edge("visual_analysis", "final_aggregation")
+    
     builder.add_edge("final_aggregation", END)
     
     # Compile the graph
@@ -362,6 +549,7 @@ def process_pdf_with_hunter(input_data: PDFHunterInput) -> PDFHunterOutput:
         "output_directory": input_data.output_directory,
         "pdf_processing_result": None,
         "static_analysis_result": None,
+        "visual_analysis_result": None,
         "errors": []
     }
     
@@ -414,7 +602,7 @@ def main():
     
     # Test configuration - use absolute path from project root
     pdf_path = "tests/test_mal_one.pdf"
-    pdf_path = "tests/87c740d2b7c22f9ccabbdef412443d166733d4d925da0e8d6e5b310ccfc89e13.pdf"
+    # pdf_path = "tests/87c740d2b7c22f9ccabbdef412443d166733d4d925da0e8d6e5b310ccfc89e13.pdf"
     
     try:
         # Create validated input

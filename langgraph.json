@@ -3,7 +3,8 @@
     "graphs": {
       "agent": "./src/static_analysis/graph.py:app",
       "pdf_processing": "./src/pdf_processing/pdf_agent.py:app",
-      "pdf_hunter": "./src/pdf_hunter_main/pdf_hunter_graph.py:app"
+      "pdf_hunter": "./src/pdf_hunter_main/pdf_hunter_graph.py:app",
+      "visual_analysis": "./src/visual_analysis/graph.py:app"
     },
     "env": ".env"
   }

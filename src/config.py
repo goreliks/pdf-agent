@@ -48,10 +48,10 @@ openai_o3_mini = ChatOpenAI(model="o3-mini")
 
 
 # Static Analysis
-STATIC_ANALYSIS_ANALYST_LLM = openai_o3_mini
-STATIC_ANALYSIS_TRIAGE_LLM = openai_o3_mini
-STATIC_ANALYSIS_TECHNICIAN_LLM = openai_o3_mini
-STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_o3_mini
+STATIC_ANALYSIS_ANALYST_LLM = openai_4o
+STATIC_ANALYSIS_TRIAGE_LLM = openai_4o
+STATIC_ANALYSIS_TECHNICIAN_LLM = openai_4o
+STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_4o
 
 
 # Visual Analysis
