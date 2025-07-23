@@ -1,4 +1,6 @@
+import os
 from langchain_openai import ChatOpenAI
+from langchain.chat_models import init_chat_model
 # from langchain_azure import ChatAzure
 # from langchain_ollama import ChatOllama
 # from langchain_anthropic import ChatAnthropic
@@ -9,7 +11,14 @@ from langchain_openai import ChatOpenAI
 # LLM Models
 # OpenAI
 openai_4o = ChatOpenAI(model="gpt-4o", temperature=0)
-openai_o3_mini = ChatOpenAI(model="o3-mini", temperature=0)
+openai_o3_mini = ChatOpenAI(model="o3-mini")
+# openai_o3_mini = init_chat_model(
+#     model="o3-mini",
+#     temperature=0,
+#     base_url="https://api.openai.com/v1",
+#     api_key=os.getenv("OPENAI_API_KEY")
+# )
+
 
 # # Azure
 # azure_gpt_4o = ChatAzure(model="gpt-4o", temperature=0)
@@ -39,10 +48,10 @@ openai_o3_mini = ChatOpenAI(model="o3-mini", temperature=0)
 
 
 # Static Analysis
-STATIC_ANALYSIS_ANALYST_LLM = openai_4o
-STATIC_ANALYSIS_TRIAGE_LLM = openai_4o
-STATIC_ANALYSIS_TECHNICIAN_LLM = openai_4o
-STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_4o
+STATIC_ANALYSIS_ANALYST_LLM = openai_o3_mini
+STATIC_ANALYSIS_TRIAGE_LLM = openai_o3_mini
+STATIC_ANALYSIS_TECHNICIAN_LLM = openai_o3_mini
+STATIC_ANALYSIS_STRATEGIC_REVIEW_LLM = openai_o3_mini
 
 
 # Visual Analysis
