@@ -13,6 +13,7 @@ from typing_extensions import Annotated, TypedDict
 # Import schemas from subgraphs
 from pdf_processing.agent_schemas import PDFProcessingOutput, PDFHashData, ExtractedImage, ExtractedURL
 from static_analysis.schemas import ForensicCaseFileOutput, Verdict, AnalysisPhase, IndicatorOfCompromise
+from visual_analysis.schemas import VisualAnalysisOutput, DeceptionTactic, BenignSignal, PrioritizedURL
 
 
 class PDFHunterInput(BaseModel):
@@ -65,6 +66,9 @@ class PDFHunterState(TypedDict):
     # Results from static analysis subgraph  
     static_analysis_result: Optional[ForensicCaseFileOutput]
     
+    # Results from visual analysis subgraph
+    visual_analysis_result: Optional[VisualAnalysisOutput]
+    
     # Error tracking
     errors: Annotated[List[str], operator.add]
 
@@ -103,10 +107,27 @@ class PDFHunterOutput(BaseModel):
     extracted_artifacts_count: Optional[int] = Field(None, description="Number of forensic artifacts extracted")
     forensic_session_id: Optional[str] = Field(None, description="Forensic analysis session ID")
     
+    # Visual Analysis Results
+    visual_verdict: Optional[str] = Field(None, description="Visual analysis overall verdict")
+    visual_confidence: Optional[float] = Field(None, description="Visual analysis confidence score")
+    visual_pages_analyzed: Optional[int] = Field(None, description="Number of pages visually analyzed")
+    visual_executive_summary: Optional[str] = Field(None, description="Visual analysis executive summary")
+    visual_deception_tactics_count: Optional[int] = Field(None, description="Number of deception tactics detected")
+    visual_benign_signals_count: Optional[int] = Field(None, description="Number of benign signals detected")
+    visual_high_priority_urls_count: Optional[int] = Field(None, description="Number of high priority URLs found")
+    
     # Combined Processing Info
-    total_processing_time: Optional[float] = Field(None, description="Total processing time for both stages")
+    total_processing_time: Optional[float] = Field(None, description="Total processing time for all analysis stages")
     pdf_processing_errors: List[str] = Field(default_factory=list, description="Errors from PDF processing")
     forensic_analysis_errors: List[str] = Field(default_factory=list, description="Errors from forensic analysis")
+    visual_analysis_errors: List[str] = Field(default_factory=list, description="Errors from visual analysis")
+    
+    # Convenience properties for visual analysis access
+    @property
+    def visual_analysis_result(self) -> Optional[VisualAnalysisOutput]:
+        """Get the complete visual analysis result."""
+        # This will be set in the state and accessible through the final result
+        return getattr(self, '_visual_analysis_result', None)
     
     # Summary methods
     def get_summary(self) -> Dict[str, Any]:
@@ -133,6 +154,18 @@ class PDFHunterOutput(BaseModel):
                 "attack_chain_length": self.attack_chain_length or 0,
                 "artifacts_extracted": self.extracted_artifacts_count or 0,
                 "analysis_errors": len(self.forensic_analysis_errors)
+            },
+            
+            # Visual Analysis Summary
+            "visual_analysis": {
+                "available": self.visual_analysis_result is not None,
+                "verdict": self.visual_analysis_result.overall_verdict if self.visual_analysis_result else None,
+                "confidence": self.visual_analysis_result.overall_confidence if self.visual_analysis_result else None,
+                "pages_analyzed": self.visual_analysis_result.total_pages_analyzed if self.visual_analysis_result else 0,
+                "deception_tactics": len(self.visual_analysis_result.all_deception_tactics) if self.visual_analysis_result else 0,
+                "benign_signals": len(self.visual_analysis_result.all_benign_signals) if self.visual_analysis_result else 0,
+                "high_priority_urls": len(self.visual_analysis_result.high_priority_urls) if self.visual_analysis_result else 0,
+                "analysis_errors": len(self.visual_analysis_errors)
             }
         }
     
